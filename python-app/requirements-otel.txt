@@ -1,0 +1,12 @@
+# OpenTelemetry auto-instrumentation + GCP direct export
+# These are installed ONLY in the Dockerfile (CI/CD layer),
+# NOT imported or used in the application code.
+opentelemetry-distro>=0.48b0
+opentelemetry-exporter-otlp>=1.27.0
+opentelemetry-instrumentation-flask>=0.48b0
+
+# GCP-native exporters — direct export to Cloud Trace / Cloud Monitoring
+# These use Application Default Credentials (ADC) automatically on Cloud Run
+opentelemetry-exporter-gcp-trace>=1.7.0
+opentelemetry-exporter-gcp-monitoring>=1.7.0
+opentelemetry-resourcedetector-gcp>=1.7.0

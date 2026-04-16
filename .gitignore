@@ -1,0 +1,29 @@
+# .gitignore
+target/
+bin/
+obj/
+*.class
+*.jar
+*.pyc
+__pycache__/
+.env
+*.log
+node_modules/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+google-cloud-sdk
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!terraform/terraform.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
