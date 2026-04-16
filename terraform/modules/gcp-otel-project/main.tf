@@ -74,6 +74,7 @@ data "google_project" "this" {
 
 locals {
   cloud_build_sa = "${data.google_project.this.number}@cloudbuild.gserviceaccount.com"
+  compute_default_sa = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
 
   cloud_build_roles = [
     "roles/run.admin",
@@ -110,7 +111,18 @@ locals {
   app_runtime_roles = [
     "roles/cloudtrace.agent",        # 寫入 Trace
     "roles/monitoring.metricWriter", # 寫入 Metrics
-    "roles/logging.logWriter"        # 寫入 Logs
+    "roles/logging.logWriter",       # 寫入 Logs
+    "roles/artifactregistry.reader"  # 拉 image 跑容器
+  ]
+}
+
+# ── Compute Engine Default SA ──────────────────────────────
+resource "google_project_iam_member" "compute_default_ar_reader" {
+  project = google_project.this.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${local.compute_default_sa}"
+  depends_on = [
+    google_project_service.apis["iam.googleapis.com"],
   ]
 }
 
@@ -121,4 +133,5 @@ resource "google_project_iam_member" "app_runtime_permissions" {
   role    = each.value
   member  = "serviceAccount:${google_service_account.app_runtime.email}"
 }
+
 

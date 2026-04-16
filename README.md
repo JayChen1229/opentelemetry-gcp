@@ -119,7 +119,16 @@ gcloud builds submit --config=cloudbuild-all.yaml \
 
 ```bash
 gcloud builds submit --config=java-app/cloudbuild.yaml \
-  --project=<YOUR_PROJECT_ID> \
+  --project=otel-test-samolab \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+
+
+# dotnet 需要部署兩個 container, 故需要額外權限
+gcloud projects add-iam-policy-binding otel-test-samolab \
+  --member="serviceAccount:842429880657-compute@developer.gserviceaccount.com" \
+  --role="roles/artifactregistry.reader"
+gcloud builds submit --config=dotnet-app/cloudbuild.yaml \
+  --project=otel-test-samolab \
   --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
 ```
 
@@ -127,9 +136,30 @@ gcloud builds submit --config=java-app/cloudbuild.yaml \
 
 ```bash
 # 取得服務 URL
-JAVA_URL=$(gcloud run services describe java-demo-app --region=asia-east1 --format="value(status.url)")
-DOTNET_URL=$(gcloud run services describe dotnet-demo-app --region=asia-east1 --format="value(status.url)")
+JAVA_URL=$(gcloud run services describe java-demo-app --region=asia-east1 --project=otel-test-samolab --format="value(status.url)")
+DOTNET_URL=$(gcloud run services describe dotnet-demo-app --region=asia-east1 --project=otel-test-samolab --format="value(status.url)")
 PYTHON_URL=$(gcloud run services describe python-demo-app --region=asia-east1 --format="value(status.url)")
+
+# 允許未驗證的存取（測試用）
+gcloud run services add-iam-policy-binding java-demo-app \
+  --region=asia-east1 \
+  --project=otel-test-samolab \
+  --member="allUsers" \ 
+  --role="roles/run.invoker"
+
+gcloud run services add-iam-policy-binding dotnet-demo-app \
+  --region=asia-east1 \
+  --project=otel-test-samolab \
+  --member="allUsers" \
+  --role="roles/run.invoker"
+
+
+
+gcloud run services add-iam-policy-binding python-demo-app \
+  --region=asia-east1 \
+  --project=otel-test-samolab \
+  --member="allUsers" \
+  --role="roles/run.invoker"
 
 # 發送請求
 curl ${JAVA_URL}/hello/world
