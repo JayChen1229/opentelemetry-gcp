@@ -1,0 +1,5 @@
+# 1. OTel 核心與自動啟動工具
+opentelemetry-distro
+
+# 2. GCP 原生 Exporters (直接打 API 專用)
+opentelemetry-exporter-gcp-trace

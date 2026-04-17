@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+# 這裡放 ADK 與其餘商業邏輯的套件
+google-adk
