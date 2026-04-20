@@ -16,6 +16,10 @@ module "project" {
   region          = var.region
   repo_name       = "otel-demo"
 
+  # 👇 加上你決定的精準命名
+  builder_sa_name = "service-cicd"
+  app_sa_name     = "service-cloudrun"
+
   labels = {
     environment = "test"
   }

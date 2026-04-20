@@ -1,0 +1,12 @@
+# ─────────────────────────────────────────────────────────
+# DEV Environment — OTel + JVM Configuration
+# ─────────────────────────────────────────────────────────
+JAVA_TOOL_OPTIONS: "-javaagent:/opt/otel/opentelemetry-javaagent.jar"
+OTEL_JAVAAGENT_EXTENSIONS: "/opt/otel/gcp-extension.jar"
+OTEL_SERVICE_NAME: "UP9999_TEST"
+OTEL_TRACES_EXPORTER: "google_cloud_trace"
+OTEL_METRICS_EXPORTER: "google_cloud_monitoring"
+OTEL_LOGS_EXPORTER: "none"
+OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+OTEL_TRACES_SAMPLER_ARG: "1.0"
+OTEL_RESOURCE_ATTRIBUTES: "deployment.PROJECT_ID=DEV,service.namespace=otel-demo"

@@ -16,10 +16,6 @@
     └─────────────────────────────────────────────────────────────┘
   -->
 
-<ItemGroup>
-<PackageReference Include="Google.Cloud.OpenTelemetry.Tracing.V1" Version="1.0.0-beta05" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.8.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.8.1" />
-</ItemGroup>
+
 
 </Project>

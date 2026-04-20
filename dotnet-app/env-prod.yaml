@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────
+# PROD Environment — OTel + .NET CLR Profiling Configuration
+# ─────────────────────────────────────────────────────────
+# .NET Auto-Instrumentation Requirements
+CORECLR_ENABLE_PROFILING: "1"
+CORECLR_PROFILER: "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
+CORECLR_PROFILER_PATH: "/opt/otel/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
+DOTNET_ADDITIONAL_DEPS: "/opt/otel/AdditionalDeps"
+DOTNET_SHARED_STORE: "/opt/otel/store"
+DOTNET_STARTUP_HOOKS: "/opt/otel/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
+OTEL_DOTNET_AUTO_HOME: "/opt/otel"
+
+# ── Application Configuration ──
+ASPNETCORE_URLS: "http://+:8080"
+
+# ── OTel Configuration ──
+OTEL_SERVICE_NAME: "dotnet-demo-app"
+OTEL_TRACES_EXPORTER: "otlp"
+OTEL_METRICS_EXPORTER: "otlp"
+OTEL_LOGS_EXPORTER: "none"
+OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4317" # Replace when Collector is ready
+OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+OTEL_TRACES_SAMPLER_ARG: "0.1" # 10% sampling in PROD
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=PROD,service.namespace=otel-demo"

@@ -72,39 +72,40 @@ data "google_project" "this" {
   depends_on = [google_project_service.apis["cloudresourcemanager.googleapis.com"]]
 }
 
-locals {
-  cloud_build_sa = "${data.google_project.this.number}@cloudbuild.gserviceaccount.com"
-  compute_default_sa = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+# ── Custom CI/CD Builder SA ────────────────────────────────
 
-  cloud_build_roles = [
-    "roles/run.admin",
-    "roles/iam.serviceAccountUser",
-    "roles/artifactregistry.writer",
-  ]
-}
-
-resource "google_project_iam_member" "cloud_build" {
-  for_each = toset(local.cloud_build_roles)
+resource "google_project_iam_member" "cicd_builder_permissions" {
+  for_each = toset(local.cicd_builder_roles)
 
   project = google_project.this.project_id
   role    = each.value
-  member  = "serviceAccount:${local.cloud_build_sa}"
+  member  = "serviceAccount:${google_service_account.cicd_builder.email}"
+}
 
-  depends_on = [
-    google_project_service.apis["cloudbuild.googleapis.com"],
-    google_project_service.apis["iam.googleapis.com"],
+locals {
+  # 注意：我們已經將 "roles/iam.serviceAccountUser" 從這個專案層級的清單中移除了
+  cicd_builder_roles = [
+    "roles/run.admin",               # To deploy Cloud Run services
+    "roles/artifactregistry.writer", # To push/pull images to/from Artifact Registry
+    "roles/logging.logWriter",       # To write build logs
+    "roles/storage.admin",           # To extract source code from GCS tarball
   ]
 }
 
 # ── Cloud Run App Runtime SA ───────────────────────────────
 
+# ── CI/CD Builder SA ──
+resource "google_service_account" "cicd_builder" {
+  project      = google_project.this.project_id
+  account_id   = var.builder_sa_name
+  display_name = "CI/CD Builder SA (${var.builder_sa_name})"
+}
+
+# ── Cloud Run App Runtime SA ──
 resource "google_service_account" "app_runtime" {
   project      = google_project.this.project_id
-  account_id   = "otel-app-runtime"
-  display_name = "OTel App Runtime Service Account"
-  description  = "Service account for Cloud Run apps to send traces, metrics, and logs"
-
-  depends_on = [google_project_service.apis["iam.googleapis.com"]]
+  account_id   = var.app_sa_name
+  display_name = "Cloud Run Runtime SA (${var.app_sa_name})"
 }
 
 locals {
@@ -116,16 +117,6 @@ locals {
   ]
 }
 
-# ── Compute Engine Default SA ──────────────────────────────
-resource "google_project_iam_member" "compute_default_ar_reader" {
-  project = google_project.this.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${local.compute_default_sa}"
-  depends_on = [
-    google_project_service.apis["iam.googleapis.com"],
-  ]
-}
-
 resource "google_project_iam_member" "app_runtime_permissions" {
   for_each = toset(local.app_runtime_roles)
 
@@ -134,4 +125,26 @@ resource "google_project_iam_member" "app_runtime_permissions" {
   member  = "serviceAccount:${google_service_account.app_runtime.email}"
 }
 
+# ── 【重點資安升級】: 精細授權 Builder 只能使用 Runtime SA ──
 
+resource "google_service_account_iam_member" "builder_can_act_as_runtime" {
+  # 這裡針對的是 app_runtime 這個「資源」本身，而不是整個 Project
+  service_account_id = google_service_account.app_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.cicd_builder.email}"
+}
+
+# ── Compute Engine Default SA ──────────────────────────────
+
+locals {
+  compute_default_sa = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "compute_default_ar_reader" {
+  project = google_project.this.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${local.compute_default_sa}"
+  depends_on = [
+    google_project_service.apis["iam.googleapis.com"],
+  ]
+}

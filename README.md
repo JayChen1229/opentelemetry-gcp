@@ -144,8 +144,9 @@ PYTHON_URL=$(gcloud run services describe python-demo-app --region=asia-east1 --
 gcloud run services add-iam-policy-binding java-demo-app \
   --region=asia-east1 \
   --project=otel-test-samolab \
-  --member="allUsers" \ 
+  --member="allUsers" \
   --role="roles/run.invoker"
+
 
 gcloud run services add-iam-policy-binding dotnet-demo-app \
   --region=asia-east1 \

@@ -1,81 +1,60 @@
 # Cloud Build pipeline for .NET Core Demo App
 # ─────────────────────────────────────────────────────────
-# Builds the Docker image, pushes to Artifact Registry,
-# deploys to Cloud Run with OTel env vars injected here.
-#
-# ⚠ .NET auto-instrumentation uses OTLP exporter.
-#   For now → set OTEL_EXPORTER_OTLP_ENDPOINT when you
-#   have a centralized Collector. Otherwise traces are
-#   exported via the built-in console/logging exporter.
-#
-#   When you scale to 10+ services, just change
-#   _OTEL_EXPORTER_OTLP_ENDPOINT to point to your
-#   centralized OTel Collector — zero app changes needed.
+# Uses Kaniko for layer caching across builds.
+# OTel & CLR env vars are loaded from env-{_ENV}.yaml.
 # ─────────────────────────────────────────────────────────
 
 substitutions:
   _REGION: asia-east1
   _REPO: otel-demo
   _SERVICE_NAME: dotnet-demo-app
-  # ── OTel Configuration (change here, not in Dockerfile) ──
-  _OTEL_SERVICE_NAME: dotnet-demo-app
-  _OTEL_TRACES_EXPORTER: otlp
-  _OTEL_METRICS_EXPORTER: otlp
-  _OTEL_LOGS_EXPORTER: none
-  # Set this to your OTel Collector endpoint when ready.
-  # For now, use console exporter or direct OTLP to GCP.
-  _OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4317"
-  _OTEL_TRACES_SAMPLER: parentbased_traceidratio
-  _OTEL_TRACES_SAMPLER_ARG: "1.0"
+  _ENV: dev  # dev | prod — selects env-{_ENV}.yaml
+  _TAG: latest  # Trigger 會傳 SHORT_SHA，手動 submit 用 latest
 
 steps:
-  # ── Step 1: Build Docker image ──
-  - name: "gcr.io/cloud-builders/docker"
+  # ── Step 1: Build & Push with Kaniko (含 layer cache) ──
+  - name: "gcr.io/kaniko-project/executor:latest"
     args:
-      - "build"
-      - "-t"
-      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${SHORT_SHA}"
-      - "-t"
-      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:latest"
-      - "."
-    dir: "dotnet-app"
+      - "--destination=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
+      - "--destination=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:latest"
+      - "--cache=true"
+      - "--cache-repo=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}-cache"
+      - "--cache-ttl=168h"
+      - "--dockerfile=dotnet-app/Dockerfile"
+      - "--context=dir://dotnet-app"
 
-  # ── Step 2: Push image to Artifact Registry ──
-  - name: "gcr.io/cloud-builders/docker"
-    args:
-      - "push"
-      - "--all-tags"
-      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}"
-
-  # ── Step 3: Deploy to Cloud Run ──
-  # NOTE: .NET auto-instrumentation uses OTLP exporter.
-  # Two options for getting traces into GCP:
-  #   Option A: Deploy with OTel Collector sidecar (add --add-container flag)
-  #   Option B: Wait for Google's native OTLP ingestion endpoint
-  # For now, the agent is active and will export when an endpoint is available.
+  # ── Step 2: Deploy to Cloud Run (Multi-container Sidecar) ──
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: "gcloud"
     args:
+      - "beta"
       - "run"
       - "deploy"
       - "${_SERVICE_NAME}"
-      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${SHORT_SHA}"
       - "--region=${_REGION}"
       - "--project=${PROJECT_ID}"
       - "--platform=managed"
-      - "--port=8080"
-      - "--cpu=1"
-      - "--memory=512Mi"
-      - "--min-instances=0"
-      - "--max-instances=10"
       - "--allow-unauthenticated"
       - "--service-account=otel-app-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--set-env-vars"
-      - "OTEL_SERVICE_NAME=${_OTEL_SERVICE_NAME},OTEL_TRACES_EXPORTER=${_OTEL_TRACES_EXPORTER},OTEL_METRICS_EXPORTER=${_OTEL_METRICS_EXPORTER},OTEL_LOGS_EXPORTER=${_OTEL_LOGS_EXPORTER},OTEL_EXPORTER_OTLP_ENDPOINT=${_OTEL_EXPORTER_OTLP_ENDPOINT},OTEL_TRACES_SAMPLER=${_OTEL_TRACES_SAMPLER},OTEL_TRACES_SAMPLER_ARG=${_OTEL_TRACES_SAMPLER_ARG},OTEL_RESOURCE_ATTRIBUTES=service.namespace=otel-demo"
-
-images:
-  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${SHORT_SHA}"
-  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:latest"
+      # --- App Container ---
+      - "--container=app"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
+      - "--port=8080"
+      - "--env-vars-file=dotnet-app/env-${_ENV}.yaml"
+      - "--cpu=1"
+      - "--memory=512Mi"
+      # --- Sidecar Container (Official OpenTelemetry Collector) ---
+      - "--container=otel-collector"
+      - "--image=otel/opentelemetry-collector-contrib:latest"
+      - "--set-secrets=/etc/otelcol-contrib/config.yaml=otel-collector-config:latest"
+      - "--clear-ports"  # <-- 關鍵：強制抹除官方映像檔內建的對外 Port，確保只有 app 接收流量
+      - "--cpu=0.5"
+      - "--memory=256Mi"
 
 options:
   logging: CLOUD_LOGGING_ONLY
+
+# ── 企業級資安最佳實踐：明確指定 Cloud Build 的執行身分 ──
+# 使用 Terraform 建立的專屬 User-Managed SA，符合最小權限與 GCP 資安規範
+serviceAccount: 'projects/${PROJECT_ID}/serviceAccounts/cicd-builder@${PROJECT_ID}.iam.gserviceaccount.com'
+

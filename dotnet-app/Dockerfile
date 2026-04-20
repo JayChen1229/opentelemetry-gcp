@@ -2,60 +2,54 @@
 # Multi-stage Dockerfile for ASP.NET Core with
 # OpenTelemetry .NET Auto-Instrumentation (zero-code)
 # ============================================================
-# The OTel .NET Auto-Instrumentation package is installed at
-# build time. CLR Profiler environment variables enable
-# automatic instrumentation without any code changes.
-#
-# All OTel configuration (service name, exporter, endpoint)
-# is injected via CI/CD environment variables at deploy time.
+# 企業級最佳實踐：
+# - 乾淨的 Runtime：將 curl, unzip 留在 Build stage
+# - OTel 設定與 .NET Profiler 環境變數完全外部化 (env.yaml)
+# - 非特權用戶運行 (APP_UID 1654)
 # ============================================================
 
-# ── Stage 1: Build the application ──
+# ── Stage 1: Build & Prepare OTel ──
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
+# 1. 準備專案與依賴緩存
 WORKDIR /src
 COPY DemoApp.csproj .
 RUN dotnet restore
 
+# 2. 下載 OTel 探針
+ARG OTEL_DOTNET_VERSION=1.9.0
+RUN apt-get update && apt-get install -y unzip && \
+    curl -fL -o /tmp/otel-dotnet-install.sh \
+    "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v${OTEL_DOTNET_VERSION}/otel-dotnet-auto-install.sh" && \
+    chmod +x /tmp/otel-dotnet-install.sh && \
+    OTEL_DOTNET_AUTO_HOME="/opt/otel" sh /tmp/otel-dotnet-install.sh
+
+# 3. 編譯程式 (經常變動層放最後)
 COPY . .
 RUN dotnet publish -c Release -o /app/out
 
-# ── Stage 2: Runtime with OTel Auto-Instrumentation ──
+# ── Stage 2: Runtime ──
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
+# 以 root 複製檔案並設定權限
+USER root
 WORKDIR /app
 COPY --from=build /app/out .
+COPY --from=build /opt/otel /opt/otel
 
-# Install dependencies for OTel auto-instrumentation
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl unzip && \
-    rm -rf /var/lib/apt/lists/*
+# 微軟 .NET 8 內建名為 `app` 的非特權使用者 (UID 1654)
+RUN chown -R 1654:1654 /app /opt/otel
 
-# Download and install OTel .NET Auto-Instrumentation
-ARG OTEL_DOTNET_VERSION=1.9.0
-RUN curl -L -o /tmp/otel-dotnet-install.sh \
-    "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v${OTEL_DOTNET_VERSION}/otel-dotnet-auto-install.sh" && \
-    chmod +x /tmp/otel-dotnet-install.sh && \
-    OTEL_DOTNET_AUTO_HOME="/otel" sh /tmp/otel-dotnet-install.sh && \
-    rm /tmp/otel-dotnet-install.sh
+# 切換為安全非特權使用者
+USER 1654
 
 # ┌─────────────────────────────────────────────────────────────┐
 # │  ZERO-CODE INSTRUMENTATION                                  │
-# │  Only the CLR Profiler wiring is set here (agent path).     │
-# │  All other OTel config (service name, exporter, endpoint)   │
-# │  is injected by CI/CD at deploy time.                       │
+# │  OTel Agent is pre-installed in /opt/otel/.                 │
+# │  All OTel config & .NET Profiler flags are externalized     │
+# │  and injected via env-{env}.yaml at deploy time.            │
+# │  This image is perfectly clean and OTel-agnostic.           │
 # └─────────────────────────────────────────────────────────────┘
-ENV CORECLR_ENABLE_PROFILING=1
-ENV CORECLR_PROFILER="{918728DD-259F-4A6A-AC2B-B85E1B658318}"
-ENV CORECLR_PROFILER_PATH="/otel/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
-ENV DOTNET_ADDITIONAL_DEPS="/otel/AdditionalDeps"
-ENV DOTNET_SHARED_STORE="/otel/store"
-ENV DOTNET_STARTUP_HOOKS="/otel/net/OpenTelemetry.AutoInstrumentation.StartupHook.dll"
-ENV OTEL_DOTNET_AUTO_HOME="/otel"
-ENV ASPNETCORE_URLS="http://+:8080"
-
-# NOTE: OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, etc.
-# are NOT set here. They are injected by CI/CD at deploy time.
 
 EXPOSE 8080
 

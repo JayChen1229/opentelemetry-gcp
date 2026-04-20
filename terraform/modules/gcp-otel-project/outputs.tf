@@ -19,7 +19,7 @@ output "artifact_registry_url" {
 
 output "cloud_build_sa" {
   description = "Cloud Build service account email"
-  value       = local.cloud_build_sa
+  value       = google_service_account.cicd_builder.email
 }
 
 output "app_runtime_sa" {
