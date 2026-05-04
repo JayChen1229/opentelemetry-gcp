@@ -1,0 +1,50 @@
+# =========================================================================
+# 🚀 Tenant: otel-apps-dev (DEV)
+# =========================================================================
+# 應用服務專案：Java / .NET / Python
+# 遙測資料透過 OTLP 傳送到 otel-collector-dev 的集中式 Collector
+# =========================================================================
+
+project:
+  id: "otel-apps-dev"
+  name: "OTel Apps DEV"
+  environment: "DEV"
+  region: "asia-east1"
+
+# ── 啟用的 GCP APIs ──
+enabled_apis:
+  - "run.googleapis.com"
+  - "cloudbuild.googleapis.com"
+  - "artifactregistry.googleapis.com"
+  - "cloudtrace.googleapis.com"
+  - "monitoring.googleapis.com"
+  - "logging.googleapis.com"
+  - "secretmanager.googleapis.com"
+  - "iam.googleapis.com"
+  - "cloudresourcemanager.googleapis.com"
+
+# ── CI/CD Builder SA ──
+builder_sa:
+  name: "service-cicd"
+  roles:
+    - "roles/run.admin"
+    - "roles/artifactregistry.writer"
+    - "roles/logging.logWriter"
+    - "roles/storage.admin"
+
+# ── Cloud Run Runtime SA ──
+runtime_sa:
+  name: "service-cloudrun"
+  roles:
+    - "roles/artifactregistry.reader"
+    - "roles/logging.logWriter"
+    - "roles/secretmanager.secretAccessor"
+    - "roles/cloudtrace.agent"
+    - "roles/monitoring.metricWriter"
+
+# ── Artifact Registry ──
+repo_name: "otel-demo"
+
+# ── Labels ──
+labels:
+  purpose: "application-services"

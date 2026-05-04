@@ -1,0 +1,61 @@
+# ============================================================
+# OpenTelemetry Collector Configuration
+# ============================================================
+# 部署在 Cloud Run，接收跨專案的 OTLP 遙測資料
+# 匯出到 GCP Cloud Trace / Monitoring / Logging
+# ============================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 256
+    timeout: 5s
+
+  resourcedetection:
+    detectors: [env, gcp]
+    timeout: 2s
+    override: false
+
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 65
+    spike_limit_percentage: 20
+
+exporters:
+  googlecloud:
+    # Traces: 直接匯出，使用 SA 的 ADC credentials
+    log:
+      default_log_name: "opentelemetry-collector"
+    metric:
+      prefix: "custom.googleapis.com/otel"
+
+  # debug exporter (v0.86+ 已棄用 logging exporter)
+  debug:
+    verbosity: normal
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [googlecloud, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [googlecloud, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [googlecloud, debug]

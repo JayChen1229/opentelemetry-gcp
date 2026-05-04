@@ -1,0 +1,51 @@
+# Cloud Build pipeline for OpenTelemetry Collector
+# ─────────────────────────────────────────────────────────
+# Build & Deploy the centralized OTel Collector to Cloud Run.
+#
+# 觸發方式:
+#   gcloud builds submit --config=otel-collector/cloudbuild.yaml \
+#     --project=otel-collector-dev
+# ─────────────────────────────────────────────────────────
+
+substitutions:
+  _REGION: asia-east1
+  _REPO: otel-collector
+  _SERVICE_NAME: otel-collector
+  _TAG: latest
+
+steps:
+  # ── Step 1: Build & Push ──
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
+      - "."
+    dir: "otel-collector"
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
+
+  # ── Step 2: Deploy to Cloud Run ──
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_NAME}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
+      - "--region=${_REGION}"
+      - "--project=${PROJECT_ID}"
+      - "--platform=managed"
+      - "--port=4318"
+      - "--cpu=1"
+      - "--memory=512Mi"
+      - "--min-instances=1"
+      - "--max-instances=5"
+      - "--allow-unauthenticated"
+      - "--service-account=service-collector@${PROJECT_ID}.iam.gserviceaccount.com"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

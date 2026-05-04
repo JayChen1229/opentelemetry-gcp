@@ -4,9 +4,8 @@ opentelemetry-distro>=0.48b0
 # 2. 針對您使用的 Web 框架進行監控
 opentelemetry-instrumentation-flask>=0.48b0
 
-# 3. GCP 原生 Exporters (直接打 API 專用)
-opentelemetry-exporter-gcp-trace>=1.7.0
-opentelemetry-exporter-gcp-monitoring>=1.11.0a0
+# 3. OTLP Exporter（傳送到集中式 Collector）
+opentelemetry-exporter-otlp>=1.27.0
 
 # 4. GCP 資源探測器 (確保標籤能正確對應到 Cloud Run 等服務)
 opentelemetry-resourcedetector-gcp>=1.7.0a0

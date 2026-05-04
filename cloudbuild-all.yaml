@@ -2,16 +2,16 @@
 # ─────────────────────────────────────────────────────────
 # Trigger:
 #   gcloud builds submit --config=cloudbuild-all.yaml \
-#     --project=<PROJECT_ID> \
+#     --project=otel-test-samolab \
 #     --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
 # ─────────────────────────────────────────────────────────
-# Architecture (now):
-#   App Container (OTel agent) ──► GCP Cloud Trace / Monitoring
-#   No sidecar, no Collector.
+# Architecture:
+#   App Container (OTel agent) ──► Centralized OTel Collector
+#                                     ├──► GCP Cloud Trace
+#                                     ├──► GCP Cloud Monitoring
+#                                     └──► GCP Cloud Logging
 #
-# Migration path (future 10+ services):
-#   Just change _OTEL_EXPORTER_OTLP_ENDPOINT to your
-#   centralized Collector URL. Zero app/image changes.
+# Collector URL: https://otel-collector-45801363652.asia-east1.run.app
 # ─────────────────────────────────────────────────────────
 
 substitutions:
@@ -56,8 +56,8 @@ steps:
     waitFor: ["build-python"]
 
   # ════════════════════════════════════════════
-  #  Deploy all services (no sidecar, direct GCP export)
-  #  OTel env vars are injected here, not in Dockerfiles.
+  #  Deploy all services → Centralized OTel Collector
+  #  所有 OTel env vars 統一用 env-dev.yaml
   # ════════════════════════════════════════════
 
   - id: "deploy-java"
@@ -78,9 +78,8 @@ steps:
       - "--min-instances=0"
       - "--max-instances=10"
       - "--allow-unauthenticated"
-      - "--service-account=otel-app-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--set-env-vars"
-      - "OTEL_SERVICE_NAME=java-demo-app,OTEL_TRACES_EXPORTER=google_cloud_trace,OTEL_METRICS_EXPORTER=google_cloud_monitoring,OTEL_LOGS_EXPORTER=none,OTEL_RESOURCE_ATTRIBUTES=service.namespace=otel-demo"
+      - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
+      - "--env-vars-file=java-app/env-dev.yaml"
 
   - id: "deploy-dotnet"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -100,9 +99,8 @@ steps:
       - "--min-instances=0"
       - "--max-instances=10"
       - "--allow-unauthenticated"
-      - "--service-account=otel-app-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--set-env-vars"
-      - "OTEL_SERVICE_NAME=dotnet-demo-app,OTEL_TRACES_EXPORTER=otlp,OTEL_METRICS_EXPORTER=otlp,OTEL_LOGS_EXPORTER=none,OTEL_RESOURCE_ATTRIBUTES=service.namespace=otel-demo"
+      - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
+      - "--env-vars-file=dotnet-app/env-dev.yaml"
 
   - id: "deploy-python"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -122,9 +120,8 @@ steps:
       - "--min-instances=0"
       - "--max-instances=10"
       - "--allow-unauthenticated"
-      - "--service-account=otel-app-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--set-env-vars"
-      - "OTEL_SERVICE_NAME=python-demo-app,OTEL_TRACES_EXPORTER=gcp_trace,OTEL_METRICS_EXPORTER=gcp_monitoring,OTEL_LOGS_EXPORTER=none,OTEL_RESOURCE_ATTRIBUTES=service.namespace=otel-demo,OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true"
+      - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
+      - "--env-vars-file=python-app/env-dev.yaml"
 
 images:
   - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/java-demo-app:${SHORT_SHA}"

@@ -1,6 +1,0 @@
-OTEL_SERVICE_NAME: "python-adk-agent-prod"
-OTEL_RESOURCE_ATTRIBUTES: "service.name=python-adk-agent-prod"
-OTEL_TRACES_EXPORTER: "gcp_trace"
-OTEL_EXPERIMENTAL_RESOURCE_DETECTORS: "gcp"
-OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
-OTEL_TRACES_SAMPLER_ARG: "0.1"  

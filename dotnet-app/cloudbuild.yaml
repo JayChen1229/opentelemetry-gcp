@@ -2,6 +2,8 @@
 # ─────────────────────────────────────────────────────────
 # Uses Kaniko for layer caching across builds.
 # OTel & CLR env vars are loaded from env-{_ENV}.yaml.
+#
+# 已改為直連集中式 OTel Collector（移除 sidecar）
 # ─────────────────────────────────────────────────────────
 
 substitutions:
@@ -23,38 +25,28 @@ steps:
       - "--dockerfile=dotnet-app/Dockerfile"
       - "--context=dir://dotnet-app"
 
-  # ── Step 2: Deploy to Cloud Run (Multi-container Sidecar) ──
+  # ── Step 2: Deploy to Cloud Run（單一 container，直連集中式 Collector）──
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: "gcloud"
     args:
-      - "beta"
       - "run"
       - "deploy"
       - "${_SERVICE_NAME}"
+      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
       - "--region=${_REGION}"
       - "--project=${PROJECT_ID}"
       - "--platform=managed"
-      - "--allow-unauthenticated"
-      - "--service-account=otel-app-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
-      # --- App Container ---
-      - "--container=app"
-      - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
       - "--port=8080"
-      - "--env-vars-file=dotnet-app/env-${_ENV}.yaml"
       - "--cpu=1"
       - "--memory=512Mi"
-      # --- Sidecar Container (Official OpenTelemetry Collector) ---
-      - "--container=otel-collector"
-      - "--image=otel/opentelemetry-collector-contrib:latest"
-      - "--set-secrets=/etc/otelcol-contrib/config.yaml=otel-collector-config:latest"
-      - "--clear-ports"  # <-- 關鍵：強制抹除官方映像檔內建的對外 Port，確保只有 app 接收流量
-      - "--cpu=0.5"
-      - "--memory=256Mi"
+      - "--min-instances=0"
+      - "--max-instances=10"
+      - "--allow-unauthenticated"
+      - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
+      - "--env-vars-file=dotnet-app/env-${_ENV}.yaml"
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
 # ── 企業級資安最佳實踐：明確指定 Cloud Build 的執行身分 ──
-# 使用 Terraform 建立的專屬 User-Managed SA，符合最小權限與 GCP 資安規範
-serviceAccount: 'projects/${PROJECT_ID}/serviceAccounts/cicd-builder@${PROJECT_ID}.iam.gserviceaccount.com'
-
+serviceAccount: 'projects/${PROJECT_ID}/serviceAccounts/service-cicd@${PROJECT_ID}.iam.gserviceaccount.com'

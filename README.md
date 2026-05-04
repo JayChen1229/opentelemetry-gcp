@@ -1,233 +1,563 @@
-# OpenTelemetry Zero-Code Instrumentation on GCP Cloud Run
+# OpenTelemetry on GCP — 完整教學文件
 
-> 在 Cloud Run 上實現 **無嵌入程式碼 (zero-code)** 的 OpenTelemetry 自動追蹤，
-> 支援 **Java / .NET Core / Python** 三種語言，並透過 **CI/CD 自動化** 整個流程。
+> 使用 **Terraform + Terragrunt** 管理 GCP 專案，搭配 **集中式 OTel Collector** 實現
+> Java / .NET / Python 三種語言的 **零侵入式 (zero-code)** 可觀測性。
 
-## 📐 架構
+---
 
-### 現在 (3~5 服務) — 直接打 GCP
+## 1. 架構總覽
 
-```
-  App Container (OTel agent 注入)
-    │
-    └──► GCP Cloud Trace / Cloud Monitoring
-         (直接輸出，無 Collector)
-```
-
-- Dockerfile 只安裝 agent，**不寫死任何 OTel 環境變數**
-- 所有 OTel 設定 (`OTEL_SERVICE_NAME`, `OTEL_TRACES_EXPORTER`, ...) 由 **CI/CD 注入**
-- Java / Python 使用 GCP-native exporter（ADC 自動認證）
-- .NET 使用 OTLP exporter（搭配未來 Collector 或 GCP OTLP endpoint）
-
-### 未來 (10+ 服務) — 加入集中 Collector
+### 雙專案架構
 
 ```
-  App Container (OTel agent 注入)
-    │
-    └──► 集中式 OTel Collector ──► Cloud Trace / Monitoring
-                                └──► Jaeger / Grafana / ...
+┌─ otel-apps-dev (應用服務專案) ────────────┐     ┌─ otel-collector-dev (Collector 專案) ──┐
+│                                            │     │                                        │
+│  ┌─────────────┐                           │     │  ┌──────────────────────────────────┐  │
+│  │ Java App    │──┐                        │     │  │ OTel Collector (Cloud Run)       │  │
+│  └─────────────┘  │                        │     │  │                                  │  │
+│  ┌─────────────┐  ├── OTLP (gRPC) ────────────────► │  receivers:  OTLP :4317          │  │
+│  │ .NET App    │──┤                        │     │  │  exporters:                      │  │
+│  └─────────────┘  │                        │     │  │    → Cloud Trace                 │  │
+│  ┌─────────────┐  │                        │     │  │    → Cloud Monitoring            │  │
+│  │ Python App  │──┘                        │     │  │    → Cloud Logging               │  │
+│  └─────────────┘                           │     │  └──────────────────────────────────┘  │
+│                                            │     │                                        │
+│  SA: service-cloudrun                      │     │  SA: service-collector                 │
+│     → roles/run.invoker (跨專案)           │     │     → cloudtrace.agent                 │
+│                                            │     │     → monitoring.metricWriter           │
+└────────────────────────────────────────────┘     │     → logging.logWriter                 │
+                                                   └────────────────────────────────────────┘
 ```
 
-> **遷移方式**：只改 CI/CD 變數 `OTEL_EXPORTER_OTLP_ENDPOINT`，不需要重建 image。
+### 為什麼要分兩個專案？
 
-## 🎯 Zero-Code 原理
+| 考量 | 說明 |
+|:-----|:-----|
+| **職責分離** | Collector 是共用基礎設施，不應與業務服務混在一起 |
+| **權限隔離** | 應用 SA 只有 `run.invoker`，不需要 `cloudtrace.agent` |
+| **獨立擴展** | Collector 可獨立 scale，不影響應用部署 |
+| **多專案共用** | 未來其他專案的服務也能傳送資料到同一個 Collector |
 
-應用程式碼 **完全不需要** import 或使用任何 OpenTelemetry 套件。
-所有追蹤功能都在 **Dockerfile** 安裝 agent，**CI/CD** 注入配置。
+---
 
-| 語言 | Dockerfile 安裝 | CI/CD 注入 | 如何運作 |
-|------|----------------|-----------|---------|
-| **Java** | Java Agent JAR + GCP exporter 擴展 | `OTEL_TRACES_EXPORTER=google_cloud_trace` | `JAVA_TOOL_OPTIONS` 注入 agent |
-| **.NET** | CLR Profiler 安裝 | `OTEL_TRACES_EXPORTER=otlp` | `CORECLR_ENABLE_PROFILING=1` 啟動 |
-| **Python** | OTel distro + GCP exporter pip 安裝 | `OTEL_TRACES_EXPORTER=gcp_trace` | `opentelemetry-instrument` 包裝啟動 |
-
-### 關鍵設計：環境變數由 CI/CD 管理
-
-```bash
-# ❌ 不要這樣（hardcode 在 Dockerfile）
-ENV OTEL_SERVICE_NAME="my-app"
-ENV OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
-
-# ✅ 應該這樣（CI/CD deploy 時注入）
-gcloud run deploy my-app \
-  --set-env-vars="OTEL_SERVICE_NAME=my-app,OTEL_TRACES_EXPORTER=google_cloud_trace"
-```
-
-## 📁 專案結構
+## 2. 專案結構
 
 ```
 opentelemetry-gcp/
-├── shared/                        # 共用配置
-│   ├── otel-collector-config.yaml #   OTel Collector 設定 (未來使用)
-│   └── cloud-run-service.yaml.tpl #   Cloud Run YAML 模板
-├── java-app/                      # Java Spring Boot 範例
-│   ├── src/                       #   純業務程式碼 (無 OTel)
-│   ├── pom.xml                    #   僅業務依賴
-│   ├── Dockerfile                 #   安裝 agent (不寫死 env vars)
-│   └── cloudbuild.yaml            #   CI/CD → 注入 OTel env vars
-├── dotnet-app/                    # .NET Core 範例
-│   ├── Program.cs                 #   純業務程式碼 (無 OTel)
-│   ├── DemoApp.csproj             #   僅業務依賴
-│   ├── Dockerfile                 #   安裝 CLR Profiler (不寫死 env vars)
-│   └── cloudbuild.yaml            #   CI/CD → 注入 OTel env vars
-├── python-app/                    # Python Flask 範例
-│   ├── app.py                     #   純業務程式碼 (無 OTel)
-│   ├── requirements.txt           #   僅業務依賴
-│   ├── requirements-otel.txt      #   OTel + GCP exporter (僅 CI/CD 使用)
-│   ├── Dockerfile                 #   安裝 OTel (不寫死 env vars)
-│   └── cloudbuild.yaml            #   CI/CD → 注入 OTel env vars
-├── deploy/
-│   ├── setup-gcp.sh               # 一鍵設定 GCP 環境
-│   └── deploy-all.sh              # 一鍵部署（OTel env vars 在這裡）
-├── cloudbuild-all.yaml            # 統一 Cloud Build pipeline
-└── README.md
+├── terraform/                              # 🏗️ 基礎架構 (IaC)
+│   ├── terragrunt.hcl                     #   根層級設定 (GCS backend)
+│   ├── bootstrap/                         #   一次性：建立 tfstate GCS Bucket
+│   ├── modules/
+│   │   └── gcp_tenant_project/            #   共用模組：1 module = 1 GCP 專案
+│   └── tenants/
+│       ├── DEV/
+│       │   ├── env.hcl                    #   DEV 環境共用變數
+│       │   ├── otel-collector-dev/        #   Collector 專案
+│       │   │   ├── tenant.yaml
+│       │   │   └── terragrunt.hcl
+│       │   └── otel-apps-dev/             #   應用服務專案
+│       │       ├── tenant.yaml
+│       │       └── terragrunt.hcl
+│       ├── SIT/
+│       └── PROD/
+│
+├── otel-collector/                         # 🔭 OTel Collector
+│   ├── Dockerfile                         #   容器映像 (contrib)
+│   ├── collector-config.yaml              #   Collector 設定
+│   └── cloudbuild.yaml                    #   CI/CD pipeline
+│
+├── java-app/                               # ☕ Java Spring Boot
+│   ├── Dockerfile                         #   安裝 OTel Java Agent
+│   ├── env-dev.yaml                       #   DEV 環境 OTel 設定
+│   ├── env-prod.yaml                      #   PROD 環境 OTel 設定
+│   ├── cloudbuild.yaml                    #   CI/CD pipeline
+│   └── src/                               #   純業務程式碼 (無 OTel)
+│
+├── dotnet-app/                             # 🔷 .NET Core
+│   ├── Dockerfile                         #   安裝 CLR Profiler
+│   ├── env-dev.yaml                       #   DEV 環境 OTel + CLR 設定
+│   ├── env-prod.yaml                      #   PROD 環境設定
+│   ├── cloudbuild.yaml                    #   CI/CD pipeline
+│   └── Program.cs                         #   純業務程式碼 (無 OTel)
+│
+├── python-app/                             # 🐍 Python Flask
+│   ├── Dockerfile                         #   安裝 OTel distro
+│   ├── env-dev.yaml                       #   DEV 環境 OTel 設定
+│   ├── cloudbuild.yaml                    #   CI/CD pipeline
+│   └── app.py                             #   純業務程式碼 (無 OTel)
+│
+├── cloudbuild-all.yaml                     # 統一 CI/CD（一次部署三個服務）
+└── shared/                                 # 共用參考配置
 ```
 
-## 🚀 快速開始
+---
 
-### 前置需求
+## 3. 環境準備
 
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud`)
-- [Docker](https://docs.docker.com/get-docker/)
-- GCP 專案並擁有 Owner / Editor 權限
-
-### Step 1: 設定 GCP 環境
+### 3.1 安裝工具
 
 ```bash
-chmod +x deploy/setup-gcp.sh
-./deploy/setup-gcp.sh <YOUR_PROJECT_ID> asia-east1
+# macOS
+brew install terraform     # >= 1.5
+brew install terragrunt    # >= 0.50
+
+# 驗證
+terraform --version
+terragrunt --version
+gcloud --version
 ```
 
-### Step 2: 部署到 Cloud Run
-
-**方式 A：本機部署**
+### 3.2 GCP 認證
 
 ```bash
-chmod +x deploy/deploy-all.sh
-./deploy/deploy-all.sh <YOUR_PROJECT_ID> asia-east1
+gcloud auth login
+gcloud auth application-default login
 ```
 
-**方式 B：Cloud Build 自動部署**
+---
+
+## 4. 基礎架構部署 (Terraform)
+
+### 4.1 Bootstrap — 建立 State Bucket（一次性）
 
 ```bash
+cd terraform/bootstrap
+terraform init
+terraform apply -var="state_project_id=<你的管理專案ID>"
+```
+
+> ⚠️ `terraform/bootstrap/terraform.tfstate` 必須 commit 到 Git！
+
+### 4.2 建立 Collector 專案
+
+```bash
+# 1. 準備 tenant.yaml（已有範本）
+cd terraform/tenants/DEV/otel-collector-dev
+
+# 2. 初始化 & 建立
+terragrunt init
+terragrunt plan     # 預覽 22 個資源
+terragrunt apply    # 建立專案（約 2 分鐘）
+```
+
+**建立的資源：**
+
+| 資源 | 說明 |
+|:-----|:-----|
+| GCP Project | `otel-collector-dev` |
+| 8 APIs | run, cloudbuild, artifactregistry, cloudtrace, monitoring, logging, iam, cloudresourcemanager |
+| Service Account | `service-cicd` — CI/CD 部署用 |
+| Service Account | `service-collector` — Collector Runtime 用 |
+| Artifact Registry | `otel-collector` — Docker images |
+| IAM Bindings | SA 權限綁定 |
+
+### 4.3 建立應用服務專案
+
+```bash
+cd terraform/tenants/DEV/otel-apps-dev
+terragrunt init
+terragrunt plan     # 預覽 25 個資源
+terragrunt apply    # 建立專案（約 2 分鐘）
+```
+
+**建立的資源：**
+
+| 資源 | 說明 |
+|:-----|:-----|
+| GCP Project | `otel-apps-dev` |
+| 9 APIs | 同上 + secretmanager |
+| Service Account | `service-cicd` — CI/CD 部署用 |
+| Service Account | `service-cloudrun` — App Runtime 用 |
+| Artifact Registry | `otel-demo` — Docker images |
+| IAM Bindings | SA 權限綁定 |
+
+### 4.4 建立更多專案（只需兩步）
+
+```bash
+# Step 1: 複製範本
+cp -r terraform/tenants/DEV/otel-apps-dev terraform/tenants/DEV/<新專案名稱>
+
+# Step 2: 修改 tenant.yaml 的 project.id / project.name / repo_name
+
+# Step 3: 建立
+cd terraform/tenants/DEV/<新專案名稱>
+terragrunt init && terragrunt apply
+```
+
+---
+
+## 5. 部署 OTel Collector
+
+### 5.1 Collector 設定檔
+
+`otel-collector/collector-config.yaml`：
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317    # 應用傳送資料到這裡
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:                           # 批次處理減少 API 呼叫
+    send_batch_size: 256
+    timeout: 5s
+  resourcedetection:               # 自動偵測 GCP 資源標籤
+    detectors: [env, gcp]
+  memory_limiter:                  # 記憶體保護
+    limit_percentage: 65
+
+exporters:
+  googlecloud: {}                  # 使用 SA 的 ADC 認證
+  debug:                           # 開發除錯用
+    verbosity: normal
+
+service:
+  extensions: [health_check]       # Cloud Run 健康檢查
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [googlecloud, debug]
+    metrics:                       # 同上
+    logs:                          # 同上
+```
+
+### 5.2 Build & Deploy
+
+```bash
+# 方式 A：Cloud Build（推薦）
+gcloud builds submit --config=otel-collector/cloudbuild.yaml \
+  --project=otel-collector-dev
+
+# 方式 B：手動部署
+cd otel-collector
+gcloud builds submit \
+  --tag=asia-east1-docker.pkg.dev/otel-collector-dev/otel-collector/otel-collector:latest \
+  --project=otel-collector-dev
+
+gcloud run deploy otel-collector \
+  --image=asia-east1-docker.pkg.dev/otel-collector-dev/otel-collector/otel-collector:latest \
+  --region=asia-east1 \
+  --project=otel-collector-dev \
+  --port=4317 \
+  --use-http2 \
+  --min-instances=1 \
+  --no-allow-unauthenticated \
+  --service-account=service-collector@otel-collector-dev.iam.gserviceaccount.com
+```
+
+### 5.3 取得 Collector URL
+
+```bash
+COLLECTOR_URL=$(gcloud run services describe otel-collector \
+  --region=asia-east1 \
+  --project=otel-collector-dev \
+  --format="value(status.url)")
+
+echo "Collector URL: ${COLLECTOR_URL}"
+```
+
+---
+
+## 6. 跨專案 IAM 設定
+
+讓應用專案的 Runtime SA 有權呼叫 Collector：
+
+```bash
+gcloud run services add-iam-policy-binding otel-collector \
+  --region=asia-east1 \
+  --project=otel-collector-dev \
+  --member="serviceAccount:service-cloudrun@otel-apps-dev.iam.gserviceaccount.com" \
+  --role="roles/run.invoker"
+```
+
+> 💡 未來新增應用專案時，也需要執行此命令授權該專案的 SA。
+
+---
+
+## 7. 部署應用服務
+
+### 7.1 OTel 環境變數設定
+
+每個服務都有 `env-dev.yaml`，統一使用 OTLP 指向 Collector：
+
+**Java (`java-app/env-dev.yaml`)**
+```yaml
+JAVA_TOOL_OPTIONS: "-javaagent:/opt/otel/opentelemetry-javaagent.jar"
+OTEL_JAVAAGENT_EXTENSIONS: "/opt/otel/gcp-extension.jar"
+OTEL_SERVICE_NAME: "java-demo-app"
+OTEL_TRACES_EXPORTER: "otlp"
+OTEL_METRICS_EXPORTER: "otlp"
+OTEL_LOGS_EXPORTER: "otlp"
+OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxxxx.asia-east1.run.app"
+OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+OTEL_TRACES_SAMPLER_ARG: "1.0"
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo"
+```
+
+**.NET (`dotnet-app/env-dev.yaml`)**
+```yaml
+# .NET CLR Profiler（零侵入式必要設定）
+CORECLR_ENABLE_PROFILING: "1"
+CORECLR_PROFILER: "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
+CORECLR_PROFILER_PATH: "/opt/otel/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
+# ... 其他 CLR 設定 ...
+
+# OTel 設定
+OTEL_SERVICE_NAME: "dotnet-demo-app"
+OTEL_TRACES_EXPORTER: "otlp"
+OTEL_METRICS_EXPORTER: "otlp"
+OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxxxx.asia-east1.run.app"
+```
+
+**Python (`python-app/env-dev.yaml`)**
+```yaml
+OTEL_SERVICE_NAME: "python-demo-app"
+OTEL_TRACES_EXPORTER: "otlp"
+OTEL_METRICS_EXPORTER: "otlp"
+OTEL_LOGS_EXPORTER: "otlp"
+OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxxxx.asia-east1.run.app"
+OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
+```
+
+### 7.2 Deploy
+
+```bash
+# 方式 A：全部一起（推薦）
 gcloud builds submit --config=cloudbuild-all.yaml \
-  --project=<YOUR_PROJECT_ID> \
+  --project=otel-apps-dev \
   --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+
+# 方式 B：單一服務
+gcloud builds submit --config=java-app/cloudbuild.yaml --project=otel-apps-dev
+gcloud builds submit --config=dotnet-app/cloudbuild.yaml --project=otel-apps-dev
+gcloud builds submit --config=python-app/cloudbuild.yaml --project=otel-apps-dev
 ```
 
-**方式 C：單一服務部署**
+### 7.3 開放測試存取
 
 ```bash
-gcloud builds submit --config=java-app/cloudbuild.yaml \
-  --project=otel-test-samolab \
-  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
-
-
-# dotnet 需要部署兩個 container, 故需要額外權限
-gcloud projects add-iam-policy-binding otel-test-samolab \
-  --member="serviceAccount:842429880657-compute@developer.gserviceaccount.com" \
-  --role="roles/artifactregistry.reader"
-gcloud builds submit --config=dotnet-app/cloudbuild.yaml \
-  --project=otel-test-samolab \
-  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+for svc in java-demo-app dotnet-demo-app python-demo-app; do
+  gcloud run services add-iam-policy-binding $svc \
+    --region=asia-east1 \
+    --project=otel-apps-dev \
+    --member="allUsers" \
+    --role="roles/run.invoker" \
+    --quiet
+done
 ```
 
-### Step 3: 測試
+---
+
+## 8. 驗證
+
+### 8.1 測試應用
 
 ```bash
 # 取得服務 URL
-JAVA_URL=$(gcloud run services describe java-demo-app --region=asia-east1 --project=otel-test-samolab --format="value(status.url)")
-DOTNET_URL=$(gcloud run services describe dotnet-demo-app --region=asia-east1 --project=otel-test-samolab --format="value(status.url)")
-PYTHON_URL=$(gcloud run services describe python-demo-app --region=asia-east1 --format="value(status.url)")
-
-# 允許未驗證的存取（測試用）
-gcloud run services add-iam-policy-binding java-demo-app \
-  --region=asia-east1 \
-  --project=otel-test-samolab \
-  --member="allUsers" \
-  --role="roles/run.invoker"
-
-
-gcloud run services add-iam-policy-binding dotnet-demo-app \
-  --region=asia-east1 \
-  --project=otel-test-samolab \
-  --member="allUsers" \
-  --role="roles/run.invoker"
-
-
-
-gcloud run services add-iam-policy-binding python-demo-app \
-  --region=asia-east1 \
-  --project=otel-test-samolab \
-  --member="allUsers" \
-  --role="roles/run.invoker"
+JAVA_URL=$(gcloud run services describe java-demo-app --region=asia-east1 --project=otel-apps-dev --format="value(status.url)")
+DOTNET_URL=$(gcloud run services describe dotnet-demo-app --region=asia-east1 --project=otel-apps-dev --format="value(status.url)")
+PYTHON_URL=$(gcloud run services describe python-demo-app --region=asia-east1 --project=otel-apps-dev --format="value(status.url)")
 
 # 發送請求
-curl ${JAVA_URL}/hello/world
-curl ${DOTNET_URL}/hello/world
-curl ${PYTHON_URL}/hello/world
+curl $JAVA_URL/hello/world
+curl $DOTNET_URL/hello/world
+curl $PYTHON_URL/hello/world
 ```
 
-### Step 4: 查看追蹤結果
+### 8.2 查看 Traces
 
-1. **Cloud Trace**: https://console.cloud.google.com/traces?project=YOUR_PROJECT_ID
-2. **Cloud Monitoring**: https://console.cloud.google.com/monitoring?project=YOUR_PROJECT_ID
+打開 GCP Console 的 Cloud Trace：
 
-## 🔄 遷移到集中式 Collector
+👉 https://console.cloud.google.com/traces?project=otel-collector-dev
 
-當服務數量增加到 10+ 或需要多後端 (Jaeger, Grafana) 時：
+你應該會看到來自三個服務的 traces，每個都標記了 `service.name` 和 `service.namespace`。
+
+### 8.3 測試 Collector 健康狀態
 
 ```bash
-# 只需改 CI/CD 變數，不需要重建 image
-gcloud run deploy java-demo-app \
-  --update-env-vars="OTEL_TRACES_EXPORTER=otlp,OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector.run.app"
+curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  $(gcloud run services describe otel-collector --region=asia-east1 --project=otel-collector-dev --format="value(status.url)")/healthz
 ```
 
-應用層零改動 ✅
+---
 
-## 🔧 自訂配置
+## 9. Zero-Code 原理
 
-### 修改 Service Name
+### 應用程式碼完全不需要修改
 
-在 `cloudbuild.yaml` 的 `_OTEL_SERVICE_NAME` substitution 中修改。
+| 語言 | Dockerfile 安裝 | 注入機制 | env-dev.yaml 控制 |
+|:-----|:----------------|:---------|:-------------------|
+| **Java** | OTel Java Agent JAR | `JAVA_TOOL_OPTIONS=-javaagent:...` | exporter, sampler, endpoint |
+| **.NET** | CLR Profiler (`.so`) | `CORECLR_ENABLE_PROFILING=1` | exporter, sampler, endpoint |
+| **Python** | OTel distro + pip packages | `opentelemetry-instrument` wrapper | exporter, sampler, endpoint |
 
-### 修改 Sampling Rate
+### 設計原則
 
-在 `cloudbuild.yaml` 的 substitutions 中修改：
+```bash
+# ❌ 不要這樣（hardcode 在 Dockerfile）
+ENV OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
+
+# ✅ 應該這樣（透過 env-dev.yaml 在部署時注入）
+#    env-dev.yaml:
+#      OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxx.run.app"
+```
+
+---
+
+## 10. 權限矩陣
+
+### Collector 專案 (`otel-collector-dev`)
+
+| SA | 角色 | 用途 |
+|:---|:-----|:-----|
+| `service-cicd` | `run.admin`, `artifactregistry.writer`, `storage.admin` | 部署 Collector |
+| `service-collector` | `cloudtrace.agent`, `monitoring.metricWriter`, `logging.logWriter` | 寫入遙測資料 |
+
+### 應用服務專案 (`otel-apps-dev`)
+
+| SA | 角色 | 用途 |
+|:---|:-----|:-----|
+| `service-cicd` | `run.admin`, `artifactregistry.writer`, `storage.admin` | 部署應用 |
+| `service-cloudrun` | `artifactregistry.reader`, `logging.logWriter`, `secretmanager.secretAccessor`, `cloudtrace.agent`, `monitoring.metricWriter` | 應用執行 |
+
+### 跨專案
+
+| Source SA | Target | Role | 用途 |
+|:----------|:-------|:-----|:-----|
+| `service-cloudrun@otel-apps-dev` | Collector Cloud Run | `run.invoker` | 呼叫 Collector |
+
+---
+
+## 11. tenant.yaml 完整欄位參考
 
 ```yaml
-substitutions:
-  _OTEL_TRACES_SAMPLER_ARG: "0.1"  # 10% sampling
+# ── 必填 ──
+project:
+  id: "my-project-id"              # GCP Project ID（全球唯一）
+  name: "My Project"               # 顯示名稱（4-30 字元，不能有括號）
+  environment: "DEV"               # DEV / SIT / PROD
+  region: "asia-east1"             # 選填，預設 asia-east1
+
+enabled_apis:                       # 至少一個
+  - "run.googleapis.com"
+
+builder_sa:
+  name: "service-cicd"             # SA account_id
+  roles:                            # Project 層級 IAM roles
+    - "roles/run.admin"
+
+runtime_sa:
+  name: "service-cloudrun"
+  roles:
+    - "roles/cloudtrace.agent"
+
+# ── 選填 ──
+repo_name: "app-images"            # Artifact Registry repo 名稱
+
+labels: {}                          # 額外 labels（environment 自動產生）
+
+budget_control:                     # 預算警報
+  monthly_limit_usd: 50
+  alert_thresholds: [0.5, 0.8, 1.0]
+
+observability:                      # 跨專案 Metrics Scope
+  central_ops_project_id: "my-ops"
+  link_metrics_scope: true
+
+user_access:                        # 人員權限
+  developers:
+    members: ["alice@example.com"]
+    roles: ["roles/viewer"]
 ```
 
-### 關閉追蹤
+---
+
+## 12. 常用指令
 
 ```bash
-gcloud run deploy my-app --update-env-vars="OTEL_SDK_DISABLED=true"
+# ── Terraform / Terragrunt ──
+terragrunt init                         # 初始化
+terragrunt plan                         # 預覽
+terragrunt apply                        # 執行
+terragrunt output                       # 查看輸出
+terragrunt state list                   # 列出受管理的資源
+terragrunt run-all plan                 # 預覽整個環境（在 DEV/ 下執行）
+
+# ── Cloud Run ──
+gcloud run services list --project=<PROJECT> --region=asia-east1
+gcloud run services describe <SERVICE> --project=<PROJECT> --region=asia-east1
+gcloud run services logs read <SERVICE> --project=<PROJECT> --region=asia-east1 --limit=20
+
+# ── Cloud Build ──
+gcloud builds list --project=<PROJECT> --limit=5
+gcloud builds log <BUILD_ID> --project=<PROJECT>
+
+# ── 除錯 ──
+terragrunt render-json                  # 檢查 YAML 解析結果
+terragrunt force-unlock <LOCK_ID>       # State 被鎖住時解鎖
 ```
 
-## ⚠️ .NET 注意事項
+---
 
-.NET auto-instrumentation 目前不支援 GCP-native exporter。有兩個選項：
+## 13. 安全機制
 
-1. **使用 OTLP exporter + 未來 Collector**：目前 OTel agent 已安裝但 endpoint 需要指向 Collector
-2. **使用 Cloud Run sidecar**：取消 `cloud-run-service.yaml.tpl` 中的 sidecar 註解
+| 機制 | 說明 |
+|:-----|:-----|
+| **PROD 刪除保護** | `deletion_policy = PREVENT`，`terraform destroy` 不會刪除 PROD 專案 |
+| **SA 最小權限** | Builder 只能 `actAs` 指定的 Runtime SA，不是整個 Project 的 serviceAccountUser |
+| **Collector 認證** | `--no-allow-unauthenticated`，只有授權的 SA 才能傳送資料 |
+| **API 安全** | `disable_on_destroy = false`，destroy 時不會關閉 API |
+| **State 版控** | GCS Bucket 開啟 versioning，可回溯任何一次 apply |
 
-建議：當你需要 .NET 的完整 tracing 時，優先引入集中式 Collector。
+---
 
-## ❓ FAQ
+## 14. 切換環境
+
+### PROD 部署
+
+```bash
+# 1. 應用服務使用 env-prod.yaml（10% sampling）
+gcloud builds submit --config=java-app/cloudbuild.yaml \
+  --project=otel-apps-prod \
+  --substitutions=_ENV=prod,_TAG=$(git rev-parse --short HEAD)
+
+# 2. Collector 不需要環境區分
+gcloud builds submit --config=otel-collector/cloudbuild.yaml \
+  --project=otel-collector-prod
+```
+
+### 關閉追蹤（緊急）
+
+```bash
+gcloud run deploy java-demo-app \
+  --project=otel-apps-dev \
+  --region=asia-east1 \
+  --update-env-vars="OTEL_SDK_DISABLED=true"
+```
+
+---
+
+## 15. FAQ
 
 **Q: 應用程式碼真的完全不需要改嗎？**
-A: 是的！Dockerfile 安裝 agent，CI/CD 注入配置。業務程式碼保持 100% 乾淨。
+A: 是的！Dockerfile 安裝 agent，env-dev.yaml 設定目標。業務程式碼 100% 乾淨。
 
-**Q: 未來切換到 Collector 時需要重建 image 嗎？**
-A: 不需要！只改 CI/CD 變數: `OTEL_TRACES_EXPORTER=otlp` + `OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4317`
+**Q: 未來想加新的 backend（例如 Jaeger）怎麼做？**
+A: 修改 `otel-collector/collector-config.yaml` 的 exporters，加入 Jaeger exporter 即可。應用端零改動。
 
-**Q: 哪些框架會被自動追蹤？**
-A:
-- Java: Spring Web MVC, Spring WebFlux, JDBC, gRPC, Kafka, Redis, etc.
-- .NET: ASP.NET Core, HttpClient, EF Core, gRPC, etc.
-- Python: Flask, Django, Requests, urllib3, psycopg2, etc.
+**Q: 新增一個服務要改什麼？**
+A: 只需要：(1) 建立 Dockerfile + cloudbuild.yaml + env-dev.yaml，(2) 部署到對應專案。Collector 不需要任何修改。
+
+**Q: 新增一個應用專案要做什麼？**
+A: (1) 複製 tenant.yaml + `terragrunt apply`，(2) 授權跨專案 IAM `run.invoker`，(3) 部署服務。
+
+**Q: Collector 掛了怎麼辦？**
+A: 設定了 `min-instances=1` 保持暖啟動。應用端的 OTel agent 有內建重試機制，Collector 恢復後資料會自動補傳。
 
 **Q: 自動注入會影響效能嗎？**
-A: 一般 overhead 在 1-3% 以內。Java Agent 啟動時間增加約 1-2 秒。
+A: 一般 overhead 在 1-3% 以內。PROD 建議設定 `OTEL_TRACES_SAMPLER_ARG=0.1`（10% sampling）。

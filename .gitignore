@@ -18,6 +18,8 @@ google-cloud-sdk
 # Terraform
 *.tfstate
 *.tfstate.*
+# Bootstrap state 需要 commit（它管理的是 state bucket 本身）
+!terraform/bootstrap/terraform.tfstate
 .terraform/
 .terraform.lock.hcl
 *.tfvars
