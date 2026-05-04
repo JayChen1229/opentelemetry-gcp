@@ -5,7 +5,7 @@ opentelemetry-distro>=0.48b0
 opentelemetry-instrumentation-flask>=0.48b0
 
 # 3. OTLP Exporter（傳送到集中式 Collector）
-opentelemetry-exporter-otlp>=1.27.0
+opentelemetry-exporter-otlp-proto-http>=1.27.0
 
 # 4. GCP 資源探測器 (確保標籤能正確對應到 Cloud Run 等服務)
 opentelemetry-resourcedetector-gcp>=1.7.0a0
