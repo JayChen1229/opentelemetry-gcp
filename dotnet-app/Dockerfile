@@ -16,13 +16,15 @@ WORKDIR /src
 COPY DemoApp.csproj .
 RUN dotnet restore
 
-# 2. 下載 OTel 探針
+# 2. 下載 OTel .NET Auto-Instrumentation（不使用 install script，直接解壓）
+#    無外網時：將 zip 預先上傳到 GCS，改用 COPY 或 gcloud storage cp 替代 curl
 ARG OTEL_DOTNET_VERSION=1.9.0
 RUN apt-get update && apt-get install -y unzip && \
-    curl -fL -o /tmp/otel-dotnet-install.sh \
-    "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v${OTEL_DOTNET_VERSION}/otel-dotnet-auto-install.sh" && \
-    chmod +x /tmp/otel-dotnet-install.sh && \
-    OTEL_DOTNET_AUTO_HOME="/opt/otel" sh /tmp/otel-dotnet-install.sh
+    curl -fSL -o /tmp/otel-dotnet.zip \
+    "https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v${OTEL_DOTNET_VERSION}/opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip" && \
+    mkdir -p /opt/otel && \
+    unzip -q /tmp/otel-dotnet.zip -d /opt/otel && \
+    rm /tmp/otel-dotnet.zip
 
 # 3. 編譯程式 (經常變動層放最後)
 COPY . .
