@@ -12,12 +12,15 @@ substitutions:
   _REPO: otel-collector
   _SERVICE_NAME: otel-collector
   _TAG: latest
+  _BASE_IMAGE: "${_REGION}-docker.pkg.dev/${PROJECT_ID}/docker-hub-remote/otel/opentelemetry-collector-contrib:0.102.0"
 
 steps:
   # ── Step 1: Build & Push ──
   - name: "gcr.io/cloud-builders/docker"
     args:
       - "build"
+      - "--build-arg"
+      - "BASE_IMAGE=${_BASE_IMAGE}"
       - "-t"
       - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${_TAG}"
       - "."
