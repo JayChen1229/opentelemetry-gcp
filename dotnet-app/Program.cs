@@ -7,23 +7,30 @@
 // └─────────────────────────────────────────────────────────────┘
 // ============================================================
 
+using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using OpenTelemetry.Logs;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure OpenTelemetry
 builder.Services
     .AddOpenTelemetry()
-    .UseOtlpExporter()
+    .ConfigureResource(r => r
+        .AddEnvironmentVariableDetector()  // 讀 OTEL_RESOURCE_ATTRIBUTES
+        .AddTelemetrySdk())                // 加上 SDK 版本資訊（選用）
     .WithTracing(t => t
         .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation())
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter())
     .WithMetrics(m => m
         .AddAspNetCoreInstrumentation()
-        .AddRuntimeInstrumentation())
-    .WithLogging();
+        .AddRuntimeInstrumentation()
+        .AddOtlpExporter())
+    .WithLogging(l => l
+        .AddOtlpExporter());
 
 var app = builder.Build();
 
