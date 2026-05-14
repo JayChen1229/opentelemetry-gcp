@@ -6,5 +6,5 @@ locals {
   env             = "DEV"
   billing_account = "010F46-806C7A-9B87C5"
   # org_id        = ""     # 個人帳戶不需要
-  # folder_id     = ""     # 個人帳戶不需要
+  # folder_id       = "123456789012" # 假裝的 DEV 資料夾 ID
 }

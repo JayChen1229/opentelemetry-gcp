@@ -22,4 +22,5 @@ terraform {
 inputs = {
   tenant          = local.tenant
   billing_account = local.env_vars.locals.billing_account
+#  folder_id       = local.env_vars.locals.folder_id
 }
