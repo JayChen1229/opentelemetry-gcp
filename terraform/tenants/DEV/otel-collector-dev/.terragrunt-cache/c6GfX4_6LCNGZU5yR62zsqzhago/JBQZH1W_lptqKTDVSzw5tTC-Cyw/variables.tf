@@ -38,6 +38,15 @@ variable "tenant" {
       central_ops_project_id: string
       link_metrics_scope:     bool
 
+    cross_project_iam:      (選填) 跨專案 IAM — 直接指定 SA email
+      - member: "serviceAccount:xxx@yyy.iam.gserviceaccount.com"
+        roles:  list(string)
+
+    cross_project_agents:   (選填) 跨專案 IAM — GCP 內建 Agent
+      - project_id: string  (必填) 外部專案 ID
+        cloudbuild_roles: list(string)  (選填) Cloud Build Agent 角色
+        cloudrun_roles:   list(string)  (選填) Cloud Run Agent 角色
+
     user_access:            (選填) 人員權限
       <group_name>:
         members: list(string)

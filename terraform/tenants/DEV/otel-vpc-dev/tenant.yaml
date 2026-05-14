@@ -1,0 +1,67 @@
+# =========================================================================
+# 🌐 Tenant: prj-vpc-dev (DEV)
+# =========================================================================
+# 共享 VPC 管理專案
+# 負責管理 VPC 網路、Private Service Connect、Service Directory
+# 其他專案的 GCP 內建 Agent 透過 cross_project_agents 取得網路存取權限
+# =========================================================================
+
+project:
+  id: "otel-vpc-dev"
+  name: "VPC Network DEV"
+  environment: "DEV"
+  region: "asia-east1"
+
+# ── 啟用的 GCP APIs ──
+enabled_apis:
+  - "compute.googleapis.com"
+  - "servicedirectory.googleapis.com"
+  - "dns.googleapis.com"
+  - "iam.googleapis.com"
+  - "cloudresourcemanager.googleapis.com"
+  - "logging.googleapis.com"
+  - "artifactregistry.googleapis.com"
+
+# ── VPC Infra Builder SA ──
+builder_sa:
+  name: "service-cicd"
+  roles:
+    - "roles/compute.networkAdmin"
+    - "roles/servicedirectory.admin"
+    - "roles/logging.logWriter"
+
+# ── Runtime SA (VPC 專案最小配置) ──
+runtime_sa:
+  name: "service-vpc-runtime"
+  roles:
+    - "roles/logging.logWriter"
+
+# ── 跨專案 IAM — GCP 內建 Service Agent ──
+# 自動用 data.google_project 查詢 project number，
+# 組合出 Cloud Build / Cloud Run Agent 的 SA email
+cross_project_agents:
+  # otel-apps-dev
+  #   Cloud Build Agent: service-{NUMBER}@gcp-sa-cloudbuild.iam.gserviceaccount.com
+  #   Cloud Run Agent:   service-{NUMBER}@serverless-robot-prod.iam.gserviceaccount.com
+  - project_id: "otel-apps-dev"
+    cloudbuild_roles:
+      - "roles/servicedirectory.viewer"
+      - "roles/compute.networkUser"
+      - "roles/servicedirectory.pscAuthorizedService"
+    cloudrun_roles:
+      - "roles/compute.networkUser"
+  # otel-collector-dev
+  - project_id: "otel-collector-dev"
+    cloudbuild_roles:
+      - "roles/servicedirectory.viewer"
+      - "roles/compute.networkUser"
+      - "roles/servicedirectory.pscAuthorizedService"
+    cloudrun_roles:
+      - "roles/compute.networkUser"
+
+# ── Artifact Registry ──
+repo_name: "otel-vpc"
+
+# ── Labels ──
+labels:
+  purpose: "shared-vpc"
