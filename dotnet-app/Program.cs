@@ -2,16 +2,29 @@
 // Simple ASP.NET Core Minimal API
 //
 // ┌─────────────────────────────────────────────────────────────┐
-// │  NO OpenTelemetry code here!                                │
-// │  Instrumentation is injected via .NET CLR Profiler          │
-// │  environment variables set in the Dockerfile:               │
-// │    CORECLR_ENABLE_PROFILING=1                               │
-// │    CORECLR_PROFILER={918728DD-...}                          │
-// │  The application code remains 100% business logic only.     │
+// │  OpenTelemetry configuration using NuGet packages           │
+// │  Data is exported via OTLP.                                 │
 // └─────────────────────────────────────────────────────────────┘
 // ============================================================
 
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure OpenTelemetry
+builder.Services
+    .AddOpenTelemetry()
+    .UseOtlpExporter()
+    .WithTracing(t => t
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation())
+    .WithMetrics(m => m
+        .AddAspNetCoreInstrumentation()
+        .AddRuntimeInstrumentation())
+    .WithLogging();
+
 var app = builder.Build();
 
 app.MapGet("/", () => new
