@@ -11,7 +11,7 @@ substitutions:
   _REGION: asia-east1
   _REPO: otel-demo
   _SERVICE_NAME: java-demo-app
-  _ENV: ""   # ⚠ 必填：dev | prod（由 Trigger 或 --substitutions 傳入）
+  _ENV: "dev"   # ⚠ 必填：dev | prod（由 Trigger 或 --substitutions 傳入）
   _TAG: latest  # Trigger 會傳 SHORT_SHA，手動 submit 用 latest
 
 steps:

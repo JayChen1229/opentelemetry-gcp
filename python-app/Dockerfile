@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-otel.txt && \
     opentelemetry-bootstrap -a install
 
 # Copy application code
-COPY . .
+COPY src/ ./src/
 
 # ┌─────────────────────────────────────────────────────────────┐
 # │  ZERO-CODE INSTRUMENTATION                                  │
@@ -36,4 +36,4 @@ COPY . .
 EXPOSE 8080
 
 # Use opentelemetry-instrument to wrap gunicorn — zero code changes
-CMD ["opentelemetry-instrument", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app:app"]
+CMD ["opentelemetry-instrument", "gunicorn", "--chdir", "src", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app:app"]
