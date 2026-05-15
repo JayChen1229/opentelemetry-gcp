@@ -79,7 +79,7 @@ steps:
       - "--max-instances=10"
       - "--allow-unauthenticated"
       - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--env-vars-file=java-app/env-dev.yaml"
+      - "--env-vars-file=java-app/deploy/env-dev.yaml"
 
   - id: "deploy-dotnet"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -100,7 +100,7 @@ steps:
       - "--max-instances=10"
       - "--allow-unauthenticated"
       - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--env-vars-file=dotnet-app/env-dev.yaml"
+      - "--env-vars-file=dotnet-app/deploy/env-dev.yaml"
 
   - id: "deploy-python"
     name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -121,7 +121,7 @@ steps:
       - "--max-instances=10"
       - "--allow-unauthenticated"
       - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--env-vars-file=python-app/env-dev.yaml"
+      - "--env-vars-file=python-app/deploy/env-dev.yaml"
 
 images:
   - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/java-demo-app:${SHORT_SHA}"

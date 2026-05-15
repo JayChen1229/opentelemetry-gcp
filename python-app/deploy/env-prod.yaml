@@ -1,0 +1,13 @@
+# ─────────────────────────────────────────────────────────
+# PROD Environment — OTel Configuration for Python
+# ─────────────────────────────────────────────────────────
+OTEL_SERVICE_NAME: "python-demo-app"
+OTEL_TRACES_EXPORTER: "otlp"
+OTEL_METRICS_EXPORTER: "otlp"
+OTEL_LOGS_EXPORTER: "otlp"
+OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4317" # Replace when Collector is ready
+OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+OTEL_TRACES_SAMPLER_ARG: "0.1" # 10% sampling in PROD
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=PROD,service.namespace=otel-demo"
+OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"

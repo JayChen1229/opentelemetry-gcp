@@ -1,7 +1,7 @@
 # Cloud Build pipeline for .NET Core Demo App
 # ─────────────────────────────────────────────────────────
 # Uses Kaniko for layer caching across builds.
-# OTel & CLR env vars are loaded from env-{_ENV}.yaml.
+# OTel & CLR env vars are loaded from deploy/env-{_ENV}.yaml.
 #
 # 已改為直連集中式 OTel Collector（移除 sidecar）
 # ─────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ substitutions:
   _REGION: asia-east1
   _REPO: otel-demo
   _SERVICE_NAME: dotnet-demo-app
-  _ENV: dev  # dev | prod — selects env-{_ENV}.yaml
+  _ENV: ""   # ⚠ 必填：dev | prod（由 Trigger 或 --substitutions 傳入）
   _TAG: latest  # Trigger 會傳 SHORT_SHA，手動 submit 用 latest
 
 steps:
@@ -24,6 +24,7 @@ steps:
       - "--cache-ttl=168h"
       - "--dockerfile=dotnet-app/Dockerfile"
       - "--context=dir://dotnet-app"
+      - "--build-arg=ENV=${_ENV}"
 
   # ── Step 2: Deploy to Cloud Run（單一 container，直連集中式 Collector）──
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -43,7 +44,7 @@ steps:
       - "--max-instances=10"
       - "--allow-unauthenticated"
       - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--env-vars-file=dotnet-app/env-${_ENV}.yaml"
+      - "--env-vars-file=dotnet-app/deploy/env-${_ENV}.yaml"
 
 options:
   logging: CLOUD_LOGGING_ONLY

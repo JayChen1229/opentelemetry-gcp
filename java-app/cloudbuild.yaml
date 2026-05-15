@@ -1,7 +1,7 @@
 # Cloud Build pipeline for Java Demo App
 # ─────────────────────────────────────────────────────────
 # Uses Kaniko for layer caching across builds.
-# OTel env vars are loaded from env-{_ENV}.yaml.
+# OTel env vars are loaded from deploy/env-{_ENV}.yaml.
 #
 # ⚠ NO sidecar — Java Agent exports directly to GCP
 #   via the google-cloud-opentelemetry extension (ADC).
@@ -11,7 +11,7 @@ substitutions:
   _REGION: asia-east1
   _REPO: otel-demo
   _SERVICE_NAME: java-demo-app
-  _ENV: dev  # dev | prod — selects env-{_ENV}.yaml
+  _ENV: ""   # ⚠ 必填：dev | prod（由 Trigger 或 --substitutions 傳入）
   _TAG: latest  # Trigger 會傳 SHORT_SHA，手動 submit 用 latest
 
 steps:
@@ -45,7 +45,7 @@ steps:
       - "--allow-unauthenticated"
       # 👇 這裡修改：套用新的 Runtime SA 名稱
       - "--service-account=service-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com"
-      - "--env-vars-file=java-app/env-${_ENV}.yaml"
+      - "--env-vars-file=java-app/deploy/env-${_ENV}.yaml"
 
 options:
   logging: CLOUD_LOGGING_ONLY
