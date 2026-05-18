@@ -29,16 +29,18 @@ processors:
     spike_limit_percentage: 20
 
 exporters:
+  # ── Traces & Logs → Google Cloud ──
   googlecloud:
-    # Traces: 直接匯出，使用 SA 的 ADC credentials
     log:
       default_log_name: "opentelemetry-collector"
-    metric:
-      prefix: "custom.googleapis.com/otel"
+
+  # ── Metrics → Google Cloud Managed Prometheus ──
+  # 讓 GCP APM (應用程式監控) 能識別服務並顯示 traces/metrics/logs
+  googlemanagedprometheus:
 
   # debug exporter (v0.86+ 已棄用 logging exporter)
   debug:
-    verbosity: normal
+    verbosity: basic
 
 extensions:
   health_check:
@@ -54,7 +56,7 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, batch]
-      exporters: [googlecloud, debug]
+      exporters: [googlemanagedprometheus, debug]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, batch]
