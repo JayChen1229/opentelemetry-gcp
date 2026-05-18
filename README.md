@@ -48,6 +48,7 @@
 opentelemetry-gcp/
 ├── terraform/                              # 🏗️ 基礎架構 (IaC)
 │   ├── terragrunt.hcl                     #   根層級設定 (GCS backend)
+│   ├── 使用教學.md                         #   Terraform 操作教學
 │   ├── bootstrap/                         #   一次性：建立 tfstate GCS Bucket
 │   ├── modules/
 │   │   └── gcp_tenant_project/            #   共用模組：1 module = 1 GCP 專案
@@ -55,11 +56,8 @@ opentelemetry-gcp/
 │       ├── DEV/
 │       │   ├── env.hcl                    #   DEV 環境共用變數
 │       │   ├── otel-collector-dev/        #   Collector 專案
-│       │   │   ├── tenant.yaml
-│       │   │   └── terragrunt.hcl
-│       │   └── otel-apps-dev/             #   應用服務專案
-│       │       ├── tenant.yaml
-│       │       └── terragrunt.hcl
+│       │   ├── otel-apps-dev/             #   應用服務專案
+│       │   └── otel-vpc-dev/              #   VPC 網路專案
 │       ├── SIT/
 │       └── PROD/
 │
@@ -68,24 +66,35 @@ opentelemetry-gcp/
 │   ├── collector-config.yaml              #   Collector 設定
 │   └── cloudbuild.yaml                    #   CI/CD pipeline
 │
-├── java-app/                               # ☕ Java Spring Boot
-│   ├── Dockerfile                         #   安裝 OTel Java Agent
-│   ├── env-dev.yaml                       #   DEV 環境 OTel 設定
-│   ├── env-prod.yaml                      #   PROD 環境 OTel 設定
+├── java-app/                               # ☕ Java Spring Boot (Zero-Code)
+│   ├── Dockerfile                         #   安裝 OTel Java Agent + GCP Extension
+│   ├── pom.xml                            #   Maven 專案設定 (無 OTel 依賴)
 │   ├── cloudbuild.yaml                    #   CI/CD pipeline
+│   ├── deploy/                            #   部署設定
+│   │   ├── env-dev.yaml                   #     DEV 環境 OTel 設定
+│   │   └── env-prod.yaml                  #     PROD 環境 OTel 設定
 │   └── src/                               #   純業務程式碼 (無 OTel)
 │
-├── dotnet-app/                             # 🔷 .NET Core
-│   ├── Dockerfile                         #   安裝 CLR Profiler
-│   ├── env-dev.yaml                       #   DEV 環境 OTel + CLR 設定
+├── dotnet-app/                             # 🔷 .NET Core (NuGet 程式化注入)
+│   ├── Dockerfile                         #   Multi-stage build
+│   ├── DemoApp.csproj                     #   專案設定 (含 OTel NuGet packages)
 │   ├── cloudbuild.yaml                    #   CI/CD pipeline
-│   └── Program.cs                         #   純業務程式碼 (無 OTel)
+│   ├── deploy/                            #   部署設定
+│   │   ├── env-dev.yaml                   #     DEV 環境 OTel 設定
+│   │   └── env-prod.yaml                  #     PROD 環境 OTel 設定
+│   └── src/
+│       └── Program.cs                     #   OTel SDK 程式化初始化 + 業務程式碼
 │
-├── python-app/                             # 🐍 Python Flask
+├── python-app/                             # 🐍 Python Flask (Zero-Code)
 │   ├── Dockerfile                         #   安裝 OTel distro
-│   ├── env-dev.yaml                       #   DEV 環境 OTel 設定
+│   ├── requirements.txt                   #   業務依賴
+│   ├── requirements-otel.txt              #   OTel 依賴 (distro + GCP detector)
 │   ├── cloudbuild.yaml                    #   CI/CD pipeline
-│   └── app.py                             #   純業務程式碼 (無 OTel)
+│   ├── deploy/                            #   部署設定
+│   │   ├── env-dev.yaml                   #     DEV 環境 OTel 設定
+│   │   └── env-prod.yaml                  #     PROD 環境 OTel 設定
+│   └── src/
+│       └── app.py                         #   純業務程式碼 (無 OTel)
 │
 └── cloudbuild-all.yaml                     # 統一 CI/CD（一次部署三個服務）
 ```
@@ -240,9 +249,9 @@ echo "Collector URL: ${COLLECTOR_URL}"
 
 ### 6.1 OTel 環境變數設定
 
-每個服務都有 `env-dev.yaml`，統一使用 OTLP (HTTP/Protobuf) 指向 Collector：
+每個服務都有 `deploy/env-dev.yaml` 和 `deploy/env-prod.yaml`，統一使用 OTLP (HTTP/Protobuf) 指向 Collector：
 
-**Java (`java-app/env-dev.yaml`)**
+**Java (`java-app/deploy/env-dev.yaml`)**
 ```yaml
 JAVA_TOOL_OPTIONS: "-javaagent:/opt/otel/opentelemetry-javaagent.jar"
 OTEL_JAVAAGENT_EXTENSIONS: "/opt/otel/gcp-extension.jar"
@@ -250,28 +259,27 @@ OTEL_SERVICE_NAME: "java-demo-app"
 OTEL_TRACES_EXPORTER: "otlp"
 OTEL_METRICS_EXPORTER: "otlp"
 OTEL_LOGS_EXPORTER: "otlp"
+OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
 OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxxxx.asia-east1.run.app"
 OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
 OTEL_TRACES_SAMPLER_ARG: "1.0"
 OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo"
 ```
 
-**.NET (`dotnet-app/env-dev.yaml`)**
+**.NET (`dotnet-app/deploy/env-dev.yaml`)** — 使用 NuGet 程式化注入
 ```yaml
-# .NET CLR Profiler（零侵入式必要設定）
-CORECLR_ENABLE_PROFILING: "1"
-CORECLR_PROFILER: "{918728DD-259F-4A6A-AC2B-B85E1B658318}"
-CORECLR_PROFILER_PATH: "/opt/otel/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so"
-# ... 其他 CLR 設定 ...
-
-# OTel 設定
 OTEL_SERVICE_NAME: "dotnet-demo-app"
-OTEL_TRACES_EXPORTER: "otlp"
-OTEL_METRICS_EXPORTER: "otlp"
+OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
 OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxxxx.asia-east1.run.app"
+OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+OTEL_TRACES_SAMPLER_ARG: "1.0"
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo"
 ```
 
-**Python (`python-app/env-dev.yaml`)**
+> 💡 .NET 已從 CLR Profiler 零侵入式改為 **NuGet 程式化注入**，在 `Program.cs` 中使用
+> `AddGcpDetector()` 自動偵測 Cloud Run instance ID (`faas.instance`)。
+
+**Python (`python-app/deploy/env-dev.yaml`)**
 ```yaml
 OTEL_SERVICE_NAME: "python-demo-app"
 OTEL_TRACES_EXPORTER: "otlp"
@@ -280,6 +288,7 @@ OTEL_LOGS_EXPORTER: "otlp"
 OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxxxx.asia-east1.run.app"
 OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"  # ⚠️ Python 預設為 gRPC，必須強制指定 HTTP
 OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo"
 ```
 
 ### 6.2 Deploy
@@ -332,15 +341,15 @@ curl $PYTHON_URL/hello/world
 
 ---
 
-## 8. Zero-Code 原理
+## 8. Instrumentation 策略
 
-### 應用程式碼完全不需要修改
+### 各語言注入方式
 
-| 語言 | Dockerfile 安裝 | 注入機制 | env-dev.yaml 控制 |
-|:-----|:----------------|:---------|:-------------------|
-| **Java** | OTel Java Agent JAR | `JAVA_TOOL_OPTIONS=-javaagent:...` | exporter, sampler, endpoint |
-| **.NET** | CLR Profiler (`.so`) | `CORECLR_ENABLE_PROFILING=1` | exporter, sampler, endpoint |
-| **Python** | OTel distro + pip packages | `opentelemetry-instrument` wrapper | exporter, sampler, endpoint, protocol |
+| 語言 | 注入方式 | Dockerfile 安裝 | 注入機制 | 設定檔 |
+|:-----|:---------|:----------------|:---------|:-------|
+| **Java** | Zero-Code | OTel Java Agent JAR + GCP Extension | `JAVA_TOOL_OPTIONS=-javaagent:...` | `deploy/env-{env}.yaml` |
+| **.NET** | NuGet 程式化 | NuGet packages (含 GCP Resource Detector) | `Program.cs` 中 `AddGcpDetector()` | `deploy/env-{env}.yaml` |
+| **Python** | Zero-Code | OTel distro + GCP Resource Detector | `opentelemetry-instrument` wrapper | `deploy/env-{env}.yaml` |
 
 ### 設計原則
 
@@ -348,8 +357,8 @@ curl $PYTHON_URL/hello/world
 # ❌ 不要這樣（hardcode 在 Dockerfile）
 ENV OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
 
-# ✅ 應該這樣（透過 env-dev.yaml 在部署時注入）
-#    env-dev.yaml:
+# ✅ 應該這樣（透過 deploy/env-{env}.yaml 在部署時注入）
+#    deploy/env-dev.yaml:
 #      OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-xxx.run.app"
 ```
 
@@ -358,7 +367,7 @@ ENV OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
 ## 9. FAQ
 
 **Q: 應用程式碼真的完全不需要改嗎？**
-A: 是的！Dockerfile 安裝 agent，env-dev.yaml 設定目標。業務程式碼 100% 乾淨。
+A: Java 和 Python 是 Zero-Code，業務程式碼 100% 乾淨。.NET 改用 NuGet 程式化注入，需要在 `Program.cs` 中初始化 OTel SDK，但所有設定（endpoint、sampler 等）仍由 `deploy/env-{env}.yaml` 外部化控制。
 
 **Q: 為什麼不用 gRPC 而改用 HTTP？**
 A: 因為 Cloud Run 提供 L7 Load Balancer，各語言 SDK 透過 HTTPS 預設發送 HTTP/Protobuf 最穩定，不會遇到 gRPC 的憑證及 HTTP/2 降級導致的 HTTP 415 不相容問題。
@@ -367,7 +376,7 @@ A: 因為 Cloud Run 提供 L7 Load Balancer，各語言 SDK 透過 HTTPS 預設�
 A: 修改 `otel-collector/collector-config.yaml` 的 exporters，加入 Jaeger exporter 即可。應用端零改動。
 
 **Q: 新增一個服務要改什麼？**
-A: 只需要：(1) 建立 Dockerfile + cloudbuild.yaml + env-dev.yaml，(2) 部署到對應專案。Collector 不需要任何修改。
+A: 只需要：(1) 建立 Dockerfile + cloudbuild.yaml + `deploy/env-{env}.yaml`，(2) 部署到對應專案。Collector 不需要任何修改。
 
 **Q: Collector 掛了怎麼辦？**
 A: 設定了 `min-instances=1` 保持暖啟動。應用端的 OTel agent 有內建重試機制，Collector 恢復後資料會自動補傳。
