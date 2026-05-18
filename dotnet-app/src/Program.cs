@@ -20,7 +20,8 @@ builder.Services
     .AddOpenTelemetry()
     .ConfigureResource(r => r
         .AddEnvironmentVariableDetector()  // 讀 OTEL_RESOURCE_ATTRIBUTES
-        .AddTelemetrySdk())                // 加上 SDK 版本資訊（選用）
+        .AddTelemetrySdk()                 // 加上 SDK 版本資訊（選用）
+        .AddGcpDetector())                 // 自動偵測 Cloud Run instance (faas.instance, cloud.platform 等)
     .WithTracing(t => t
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
