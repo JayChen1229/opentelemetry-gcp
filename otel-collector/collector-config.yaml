@@ -16,10 +16,10 @@ receivers:
 processors:
   batch:
     send_batch_size: 256
-    timeout: 5s
+    timeout: 10s
 
   resourcedetection:
-    detectors: [env, gcp]
+    detectors: [env]
     timeout: 2s
     override: false
 
