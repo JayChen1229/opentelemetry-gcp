@@ -9,7 +9,6 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG ENV=dev
 
 WORKDIR /src
-COPY deploy/nuget-${ENV}.config nuget.config
 COPY DemoApp.csproj .
 RUN dotnet restore
 
