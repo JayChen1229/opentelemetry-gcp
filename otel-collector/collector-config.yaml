@@ -40,7 +40,7 @@ exporters:
 
   # debug exporter (v0.86+ 已棄用 logging exporter)
   debug:
-    verbosity: basic
+    verbosity: detailed
 
 extensions:
   health_check:
