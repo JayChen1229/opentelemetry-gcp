@@ -12,7 +12,7 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Logs;
-using OpenTelemetry.ResourceDetectors.Gcp;
+using OpenTelemetry.Resource.Gcp;
 
 var builder = WebApplication.CreateBuilder(args);
 
