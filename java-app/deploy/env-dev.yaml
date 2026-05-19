@@ -14,7 +14,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-collector-45801363652.asia-east1.run.
 OTEL_EXPORTER_OTLP_TIMEOUT: "30000"
 OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
 OTEL_TRACES_SAMPLER_ARG: "1.0"
-OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo"
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo,faas.name=java-demo-app"
 
 # ── Cross-Service Chain URLs ──
 DOTNET_APP_URL: "https://dotnet-demo-app-1009865678375.asia-east1.run.app"
