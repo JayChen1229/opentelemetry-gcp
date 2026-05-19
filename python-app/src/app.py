@@ -1,5 +1,5 @@
 """
-Simple Flask REST API.
+Simple Flask REST API with cross-service tracing.
 
 ┌─────────────────────────────────────────────────────────────┐
 │  NO OpenTelemetry code here!                                │
@@ -7,11 +7,16 @@ Simple Flask REST API.
 │  `opentelemetry-instrument` CLI wrapper in the Dockerfile:  │
 │    CMD ["opentelemetry-instrument", "gunicorn", ...]        │
 │  The application code remains 100% business logic only.     │
+│                                                             │
+│  Distributed Trace Chain:                                   │
+│    Java /chain → .NET /chain → Python /chain (terminal)     │
 └─────────────────────────────────────────────────────────────┘
 """
 
 import datetime
+import os
 
+import requests
 from flask import Flask, jsonify
 
 app = Flask(__name__)
@@ -37,6 +42,22 @@ def hello(name: str):
         greeting=f"Hello, {name}! 👋",
         language="Python",
         instrumentation="zero-code (opentelemetry-instrument)",
+    )
+
+
+# ── Distributed Trace Chain (Terminal) ──
+# Python is the last service in the chain
+@app.route("/chain")
+def chain():
+    import time
+    # Simulate some work
+    time.sleep(0.03)
+
+    return jsonify(
+        service="python-demo-app",
+        step="3/3 (chain terminal)",
+        timestamp=datetime.datetime.utcnow().isoformat(),
+        message="End of distributed trace chain 🏁",
     )
 
 

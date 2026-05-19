@@ -1,9 +1,12 @@
 // ============================================================
-// Simple ASP.NET Core Minimal API
+// Simple ASP.NET Core Minimal API with cross-service tracing
 //
 // ┌─────────────────────────────────────────────────────────────┐
 // │  OpenTelemetry configuration using NuGet packages           │
 // │  Data is exported via OTLP.                                 │
+// │                                                             │
+// │  Distributed Trace Chain:                                   │
+// │    Java /chain → .NET /chain → Python /chain                │
 // └─────────────────────────────────────────────────────────────┘
 // ============================================================
 
@@ -15,6 +18,9 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Resources.Gcp;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Register HttpClient for downstream calls
+builder.Services.AddHttpClient();
 
 // Configure OpenTelemetry
 builder.Services
@@ -53,7 +59,40 @@ app.MapGet("/hello/{name}", (string name) =>
     {
         greeting = $"Hello, {name}! 👋",
         language = "C#",
-        instrumentation = "zero-code (.NET CLR Profiler)"
+        instrumentation = "NuGet programmatic (with GCP Resource Detector)"
+    };
+});
+
+// ── Distributed Trace Chain ──
+// .NET receives from Java, then calls Python
+app.MapGet("/chain", async (IHttpClientFactory httpClientFactory) =>
+{
+    var pythonAppUrl = Environment.GetEnvironmentVariable("PYTHON_APP_URL") ?? "";
+    var pythonResponse = "";
+
+    if (!string.IsNullOrEmpty(pythonAppUrl))
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            pythonResponse = await client.GetStringAsync($"{pythonAppUrl}/chain");
+        }
+        catch (Exception e)
+        {
+            pythonResponse = $"Error calling Python: {e.Message}";
+        }
+    }
+    else
+    {
+        pythonResponse = "PYTHON_APP_URL not configured";
+    }
+
+    return new
+    {
+        service = "dotnet-demo-app",
+        step = "2/3 (middle of chain)",
+        timestamp = DateTime.UtcNow.ToString("o"),
+        downstream = pythonResponse
     };
 });
 

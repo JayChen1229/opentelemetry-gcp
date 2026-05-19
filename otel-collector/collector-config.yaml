@@ -33,7 +33,6 @@ exporters:
   googlecloud:
     log:
       default_log_name: "opentelemetry-collector"
-    # metrics 不設 prefix → 預設走 workload.googleapis.com/
 
   # debug exporter (v0.86+ 已棄用 logging exporter)
   debug:
