@@ -15,4 +15,4 @@ OTEL_TRACES_SAMPLER_ARG: "1.0"
 OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo,faas.name=dotnet-demo-app"
 
 # ── Cross-Service Chain URLs ──
-PYTHON_APP_URL: "https://python-demo-app-1009865678375.asia-east1.run.app"
+PYTHON_APP_URL: "https://python-demo-app-45801363652.asia-east1.run.app"
