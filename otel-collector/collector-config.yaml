@@ -26,15 +26,15 @@ processors:
     trace_statements:
       - context: resource
         statements:
-          - replace_pattern(attributes["cloud.resource_id"], "^(//run.googleapis.com/projects/[^/]+/locations/[^/]+)/revisions/.*", Concat(["$$1/services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
     metric_statements:
       - context: resource
         statements:
-          - replace_pattern(attributes["cloud.resource_id"], "^(//run.googleapis.com/projects/[^/]+/locations/[^/]+)/revisions/.*", Concat(["$$1/services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
     log_statements:
       - context: resource
         statements:
-          - replace_pattern(attributes["cloud.resource_id"], "^(//run.googleapis.com/projects/[^/]+/locations/[^/]+)/revisions/.*", Concat(["$$1/services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
 
   batch:
     send_batch_size: 256
