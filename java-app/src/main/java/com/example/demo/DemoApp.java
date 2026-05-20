@@ -35,7 +35,11 @@ public class DemoApp {
     @Value("${DOTNET_APP_URL:}")
     private String dotnetAppUrl;
 
-    private final RestClient restClient = RestClient.create();
+    private final RestClient restClient;
+
+    public DemoApp(RestClient.Builder restClientBuilder) {
+        this.restClient = restClientBuilder.build();
+    }
 
     public static void main(String[] args) {
         SpringApplication.run(DemoApp.class, args);

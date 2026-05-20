@@ -4,7 +4,6 @@
 # 透過集中式 OTel Collector 匯出遙測資料
 # ─────────────────────────────────────────────────────────
 OTEL_SERVICE_NAME: "python-demo-app"
-# OTEL_RESOURCE_DETECTORS: "gcp,env,host"
 OTEL_TRACES_EXPORTER: "otlp"
 OTEL_METRICS_EXPORTER: "otlp"
 OTEL_LOGS_EXPORTER: "otlp"

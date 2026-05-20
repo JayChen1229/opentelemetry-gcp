@@ -20,15 +20,21 @@ processors:
     timeout: 2s
     override: false
 
-  # ✅ 修正 cloud.resource_id 指向 Service（而非 Revision）
-  resource:
-    attributes:
-      - key: service.name
-        value: ${env:K_SERVICE}
-        action: upsert
-      - key: cloud.resource_id
-        value: "//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/${env:K_SERVICE}"
-        action: upsert
+  # ✅ 動態修正 cloud.resource_id 指向 Service（而非 Revision）
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - replace_pattern(attributes["cloud.resource_id"], "^(//run.googleapis.com/projects/[^/]+/locations/[^/]+)/revisions/.*", Concat("", "$1/services/", attributes["service.name"])) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+    metric_statements:
+      - context: resource
+        statements:
+          - replace_pattern(attributes["cloud.resource_id"], "^(//run.googleapis.com/projects/[^/]+/locations/[^/]+)/revisions/.*", Concat("", "$1/services/", attributes["service.name"])) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+    log_statements:
+      - context: resource
+        statements:
+          - replace_pattern(attributes["cloud.resource_id"], "^(//run.googleapis.com/projects/[^/]+/locations/[^/]+)/revisions/.*", Concat("", "$1/services/", attributes["service.name"])) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
 
   batch:
     send_batch_size: 256
@@ -52,13 +58,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, resource, batch]
+      processors: [memory_limiter, resourcedetection, transform, batch]
       exporters: [otlphttp, debug]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, resource, batch]
+      processors: [memory_limiter, resourcedetection, transform, batch]
       exporters: [otlphttp, debug]
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, resource, batch]
+      processors: [memory_limiter, resourcedetection, transform, batch]
       exporters: [otlphttp, debug]
