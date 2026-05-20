@@ -28,22 +28,22 @@ processors:
     limit_percentage: 65
     spike_limit_percentage: 20
 
-  # ── 修正 cloud.resource_id：revision → service ──
+ # ── 修正 cloud.resource_id：resource 屬性原地置換 ──
   transform/fix_resource_id:
     error_mode: ignore
     trace_statements:
       - context: resource
         statements:
-          # 修正：where 必須與 set 寫在同一個引號字串內
-          - set(attributes["cloud.resource_id"], replace_pattern(attributes["cloud.resource_id"], "revisions/.+", Concat(["services/", attributes["service.name"]], ""))) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          # 移除外層的 set，並將 Concat 改為小寫 concat
+          - replace_pattern(attributes["cloud.resource_id"], "revisions/.+", concat(["services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
     metrics_statements:
       - context: resource
         statements:
-          - set(attributes["cloud.resource_id"], replace_pattern(attributes["cloud.resource_id"], "revisions/.+", Concat(["services/", attributes["service.name"]], ""))) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - replace_pattern(attributes["cloud.resource_id"], "revisions/.+", concat(["services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
     log_statements:
       - context: resource
         statements:
-          - set(attributes["cloud.resource_id"], replace_pattern(attributes["cloud.resource_id"], "revisions/.+", Concat(["services/", attributes["service.name"]], ""))) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - replace_pattern(attributes["cloud.resource_id"], "revisions/.+", concat(["services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
 
 exporters:
   otlphttp:
