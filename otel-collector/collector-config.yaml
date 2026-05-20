@@ -21,23 +21,24 @@ processors:
     override: false
 
   # ✅ 動態修正 cloud.resource_id 指向 Service（而非 Revision）
+  # 從 App 自帶的 cloud.account.id / cloud.region 取值，支援多專案架構
   transform:
     error_mode: ignore
     trace_statements:
       - context: resource
         statements:
-          - set(attributes["gcp.project_id"], "${env:GOOGLE_CLOUD_PROJECT}")
-          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
+          - set(attributes["gcp.project_id"], attributes["cloud.account.id"]) where attributes["cloud.account.id"] != nil
+          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/", attributes["cloud.account.id"], "/locations/", attributes["cloud.region"], "/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil and attributes["cloud.account.id"] != nil and attributes["cloud.region"] != nil
     metric_statements:
       - context: resource
         statements:
-          - set(attributes["gcp.project_id"], "${env:GOOGLE_CLOUD_PROJECT}")
-          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
+          - set(attributes["gcp.project_id"], attributes["cloud.account.id"]) where attributes["cloud.account.id"] != nil
+          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/", attributes["cloud.account.id"], "/locations/", attributes["cloud.region"], "/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil and attributes["cloud.account.id"] != nil and attributes["cloud.region"] != nil
     log_statements:
       - context: resource
         statements:
-          - set(attributes["gcp.project_id"], "${env:GOOGLE_CLOUD_PROJECT}")
-          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
+          - set(attributes["gcp.project_id"], attributes["cloud.account.id"]) where attributes["cloud.account.id"] != nil
+          - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/", attributes["cloud.account.id"], "/locations/", attributes["cloud.region"], "/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil and attributes["cloud.account.id"] != nil and attributes["cloud.region"] != nil
 
   batch:
     send_batch_size: 256
