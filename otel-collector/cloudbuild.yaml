@@ -49,6 +49,7 @@ steps:
       - "--max-instances=5"
       - "--allow-unauthenticated"
       - "--service-account=service-collector@${PROJECT_ID}.iam.gserviceaccount.com"
+      - "--set-env-vars=GOOGLE_CLOUD_PROJECT=${PROJECT_ID},CLOUD_RUN_REGION=${_REGION}"
 
 options:
   logging: CLOUD_LOGGING_ONLY

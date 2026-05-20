@@ -54,6 +54,10 @@ extensions:
   googleclientauth: {}
 
 service:
+  telemetry:
+    resource:
+      gcp.project_id: ${env:GOOGLE_CLOUD_PROJECT}
+      cloud.account.id: ${env:GOOGLE_CLOUD_PROJECT}
   extensions: [health_check, googleclientauth]
   pipelines:
     traces:
