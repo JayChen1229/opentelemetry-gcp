@@ -28,6 +28,30 @@ processors:
     limit_percentage: 65
     spike_limit_percentage: 20
 
+  # ── 修正 cloud.resource_id：revision → service ──
+  # GCP Resource Detector 產生的是 revision 層級的 URI：
+  #   //run.googleapis.com/.../revisions/java-demo-app-00004-swt
+  # 但 APM Topology 需要 service 層級的 URI：
+  #   //run.googleapis.com/.../services/java-demo-app
+  # 升級版：直接利用 service.name 屬性，相容任何自訂修訂版本名稱
+  transform/fix_resource_id:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["cloud.resource_id"], replace_pattern(attributes["cloud.resource_id"], "revisions/.+", Concat(["services/", attributes["service.name"]], "")))
+        where: attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+    metrics_statements:
+      - context: resource
+        statements:
+          - set(attributes["cloud.resource_id"], replace_pattern(attributes["cloud.resource_id"], "revisions/.+", Concat(["services/", attributes["service.name"]], "")))
+        where: attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["cloud.resource_id"], replace_pattern(attributes["cloud.resource_id"], "revisions/.+", Concat(["services/", attributes["service.name"]], "")))
+        where: attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+
 exporters:
   otlphttp:
     endpoint: https://telemetry.googleapis.com
@@ -48,13 +72,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, batch]
+      processors: [memory_limiter, resourcedetection, transform/fix_resource_id, batch]
       exporters: [otlphttp, debug]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, batch]
+      processors: [memory_limiter, resourcedetection, transform/fix_resource_id, batch]
       exporters: [otlphttp, debug]
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, batch]
+      processors: [memory_limiter, resourcedetection, transform/fix_resource_id, batch]
       exporters: [otlphttp, debug]
