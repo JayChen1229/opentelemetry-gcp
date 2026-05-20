@@ -1,10 +1,6 @@
 # ============================================================
 # OpenTelemetry Collector Configuration
 # ============================================================
-# 部署在 Cloud Run，接收跨專案的 OTLP 遙測資料
-# 匯出到 GCP Cloud Trace / Monitoring / Logging
-# ============================================================
-
 receivers:
   otlp:
     protocols:
@@ -14,48 +10,35 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  batch:
-    send_batch_size: 256
-    timeout: 10s
-
-  resourcedetection:
-    detectors: [env]
-    timeout: 2s
-    override: false
-
   memory_limiter:
     check_interval: 1s
     limit_percentage: 65
     spike_limit_percentage: 20
 
-  # ── 修正 cloud.resource_id：revision → service ──
-  # GCP Resource Detector 產生的是 revision 層級的 URI：
-  #   //run.googleapis.com/.../revisions/java-demo-app-00004-swt
-  # 但 APM Topology 需要 service 層級的 URI：
-  #   //run.googleapis.com/.../services/java-demo-app
-  # 這個 transform 將 "revisions/<service>-<revision>" 替換為 "services/<service>"
-  transform/fix_resource_id:
-    error_mode: ignore
-    trace_statements:
-      - context: resource
-        statements:
-          - replace_pattern(attributes["cloud.resource_id"], "revisions/(.+)-\\d{5}-[a-z]{3}$$", "services/$${1}")
-    metrics_statements:
-      - context: resource
-        statements:
-          - replace_pattern(attributes["cloud.resource_id"], "revisions/(.+)-\\d{5}-[a-z]{3}$$", "services/$${1}")
-    log_statements:
-      - context: resource
-        statements:
-          - replace_pattern(attributes["cloud.resource_id"], "revisions/(.+)-\\d{5}-[a-z]{3}$$", "services/$${1}")
+  resourcedetection:
+    detectors: [env, gcp]
+    timeout: 2s
+    override: false
+
+  # ✅ 修正 cloud.resource_id 指向 Service（而非 Revision）
+  resource:
+    attributes:
+      - key: service.name
+        value: ${env:K_SERVICE}
+        action: upsert
+      - key: cloud.resource_id
+        value: "//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/${env:K_SERVICE}"
+        action: upsert
+
+  batch:
+    send_batch_size: 256
+    timeout: 10s
 
 exporters:
   otlphttp:
     endpoint: https://telemetry.googleapis.com
     auth:
       authenticator: googleclientauth
-
-  # debug exporter (v0.86+ 已棄用 logging exporter)
   debug:
     verbosity: detailed
 
@@ -69,13 +52,13 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, transform/fix_resource_id, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlphttp, debug]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, transform/fix_resource_id, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlphttp, debug]
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, transform/fix_resource_id, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlphttp, debug]
