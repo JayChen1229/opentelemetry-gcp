@@ -15,8 +15,13 @@ processors:
     limit_percentage: 65
     spike_limit_percentage: 20
 
+  # ⚠️ 僅保留 env detector — 不啟用 gcp detector
+  # 原因：Collector 的 gcp detector 會讀取 Collector 自己的 K_SERVICE / K_REVISION，
+  # 並將其填入 App 遙測中缺失的 faas.name / faas.version 欄位，
+  # 導致 Python 等服務的 faas.name 被錯誤覆寫為 "otel-collector"。
+  # App 端的 SDK 已在各自容器中執行 GCP Resource Detector，Collector 不應重複偵測。
   resourcedetection:
-    detectors: [env, gcp]
+    detectors: [env]
     timeout: 2s
     override: false
 
