@@ -12,7 +12,7 @@ substitutions:
   _REPO: otel-collector
   _SERVICE_NAME: otel-collector
   _TAG: latest
-  _BASE_IMAGE: "${_REGION}-docker.pkg.dev/${PROJECT_ID}/docker-hub-remote/otel/opentelemetry-collector-contrib:0.102.0"
+  _BASE_IMAGE: "asia-east1-docker.pkg.dev/otel-collector-dev/docker-hub-remote/otel/opentelemetry-collector-contrib:0.140.0"
 
 steps:
   # ── Step 1: Build & Push ──

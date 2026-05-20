@@ -19,7 +19,7 @@ processors:
     timeout: 10s
 
   resourcedetection:
-    detectors: [env]
+    detectors: [env,gcp]
     timeout: 2s
     override: false
 
@@ -29,10 +29,10 @@ processors:
     spike_limit_percentage: 20
 
 exporters:
-  # ── Traces / Metrics / Logs → Google Cloud ──
-  googlecloud:
-    log:
-      default_log_name: "opentelemetry-collector"
+  otlphttp:
+    endpoint: https://telemetry.googleapis.com
+    auth:
+      authenticator: googleclientauth
 
   # debug exporter (v0.86+ 已棄用 logging exporter)
   debug:
@@ -41,19 +41,20 @@ exporters:
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
+  googleclientauth: {}
 
 service:
-  extensions: [health_check]
+  extensions: [health_check, googleclientauth]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, batch]
-      exporters: [googlecloud, debug]
+      exporters: [otlphttp, debug]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, batch]
-      exporters: [googlecloud, debug]
+      exporters: [otlphttp, debug]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, batch]
-      exporters: [googlecloud, debug]
+      exporters: [otlphttp, debug]

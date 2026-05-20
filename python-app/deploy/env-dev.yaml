@@ -12,6 +12,6 @@ OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
 OTEL_EXPORTER_OTLP_TIMEOUT: "30000"
 OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
 OTEL_TRACES_SAMPLER_ARG: "1.0"
-OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo,faas.name=python-demo-app"
+OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=DEV,service.namespace=otel-demo"
 OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
 
