@@ -28,27 +28,30 @@ processors:
     limit_percentage: 65
     spike_limit_percentage: 20
 
- # ── 修正 cloud.resource_id：resource 屬性原地置換 ──
+  # ── 修正 cloud.resource_id：revision → service ──
+  # GCP Resource Detector 產生的是 revision 層級的 URI：
+  #   //run.googleapis.com/.../revisions/java-demo-app-00004-swt
+  # 但 APM Topology 需要 service 層級的 URI：
+  #   //run.googleapis.com/.../services/java-demo-app
+  # 這個 transform 將 "revisions/<service>-<revision>" 替換為 "services/<service>"
   transform/fix_resource_id:
     error_mode: ignore
     trace_statements:
       - context: resource
         statements:
-          # 移除外層的 set，並將 Concat 改為小寫 concat
-          - replace_pattern(attributes["cloud.resource_id"], "revisions/.+", concat(["services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - replace_pattern(attributes["cloud.resource_id"], "revisions/(.+)-\\d{5}-[a-z]{3}$$", "services/$${1}")
     metrics_statements:
       - context: resource
         statements:
-          - replace_pattern(attributes["cloud.resource_id"], "revisions/.+", concat(["services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - replace_pattern(attributes["cloud.resource_id"], "revisions/(.+)-\\d{5}-[a-z]{3}$$", "services/$${1}")
     log_statements:
       - context: resource
         statements:
-          - replace_pattern(attributes["cloud.resource_id"], "revisions/.+", concat(["services/", attributes["service.name"]], "")) where attributes["cloud.resource_id"] != nil and attributes["service.name"] != nil
+          - replace_pattern(attributes["cloud.resource_id"], "revisions/(.+)-\\d{5}-[a-z]{3}$$", "services/$${1}")
 
 exporters:
   otlphttp:
-    # 修正：補上官方正確的 otlp. 前綴
-    endpoint: https://otlp.telemetry.googleapis.com
+    endpoint: https://telemetry.googleapis.com
     auth:
       authenticator: googleclientauth
 
