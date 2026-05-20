@@ -35,11 +35,7 @@ public class DemoApp {
     @Value("${DOTNET_APP_URL:}")
     private String dotnetAppUrl;
 
-    private final RestClient restClient;
-
-    public DemoApp(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.build();
-    }
+    private final RestClient restClient = RestClient.create();
 
     public static void main(String[] args) {
         SpringApplication.run(DemoApp.class, args);
@@ -116,3 +112,4 @@ public class DemoApp {
         return Map.of("status", "healthy");
     }
 }
+
