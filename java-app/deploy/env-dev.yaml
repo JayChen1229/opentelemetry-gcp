@@ -5,6 +5,7 @@
 # ─────────────────────────────────────────────────────────
 JAVA_TOOL_OPTIONS: "-javaagent:/opt/otel/opentelemetry-javaagent.jar"
 OTEL_JAVAAGENT_EXTENSIONS: "/opt/otel/gcp-extension.jar"
+OTEL_RESOURCE_PROVIDERS_GCP_ENABLED: "true"
 OTEL_SERVICE_NAME: "java-demo-app"
 OTEL_TRACES_EXPORTER: "otlp"
 OTEL_METRICS_EXPORTER: "otlp"

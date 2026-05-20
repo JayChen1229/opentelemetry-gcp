@@ -19,7 +19,7 @@ processors:
     timeout: 10s
 
   resourcedetection:
-    detectors: [env,gcp]
+    detectors: [env]
     timeout: 2s
     override: false
 
