@@ -26,14 +26,17 @@ processors:
     trace_statements:
       - context: resource
         statements:
+          - set(attributes["gcp.project_id"], "${env:GOOGLE_CLOUD_PROJECT}")
           - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
     metric_statements:
       - context: resource
         statements:
+          - set(attributes["gcp.project_id"], "${env:GOOGLE_CLOUD_PROJECT}")
           - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
     log_statements:
       - context: resource
         statements:
+          - set(attributes["gcp.project_id"], "${env:GOOGLE_CLOUD_PROJECT}")
           - set(attributes["cloud.resource_id"], Concat(["//run.googleapis.com/projects/${env:GOOGLE_CLOUD_PROJECT}/locations/${env:CLOUD_RUN_REGION}/services/", attributes["service.name"]], "")) where attributes["service.name"] != nil
 
   batch:
