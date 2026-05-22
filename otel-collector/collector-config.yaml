@@ -21,7 +21,7 @@ processors:
   # 導致 Python 等服務的 faas.name 被錯誤覆寫為 "otel-collector"。
   # App 端的 SDK 已在各自容器中執行 GCP Resource Detector，Collector 不應重複偵測。
   resourcedetection:
-    detectors: [env]
+    detectors: [env, gcp]
     timeout: 2s
     override: false
 
